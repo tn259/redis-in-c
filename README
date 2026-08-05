@@ -1,0 +1,11 @@
+# Running TODOS
+
+## Step 1
+
+- Add libusan, libasan, libtsan checking
+- Add Valgrind checking
+- Write exhaustive tests from RESP spec examples
+
+## Step 2
+
+- Read Beej's guide to network programming
