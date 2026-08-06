@@ -12,7 +12,9 @@ WARNINGS := -Wall -Wextra -pedantic -Wshadow -Wpointer-arith -Wcast-align \
             -Wredundant-decls -Wnested-externs -Winline -Wno-long-long \
             -Wconversion -Wstrict-prototypes -Werror
 
-CFLAGS := -g -std=c17 $(WARNINGS)
+CFLAGS := -std=c17 $(WARNINGS)
+
+DEBUG_FLAGS := -g -O1 -fsanitize=address,undefined
 
 DEPFLAGS := -MMD -MP
 
@@ -21,7 +23,7 @@ CC := clang
 .PHONY: test main all clean
 
 build: $(MAIN_SRC) $(SRCFILES)
-	$(CC) $(CFLAGS) $^ $(DEPFLAGS) -o $(MAIN_EXE)
+	$(CC) $(CFLAGS) $(DEBUG_FLAGS) $^ $(DEPFLAGS) -o $(MAIN_EXE)
 	chmod a+x $(MAIN_EXE)
 
 test: build

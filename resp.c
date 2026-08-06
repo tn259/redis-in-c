@@ -21,8 +21,9 @@ static int len_to_next_crlf(const char* str) {
 static SimpleString_t deserialize_ss(const char* resp_str, size_t len) {
     assert(len >= 2); // account for +()\r\n
 
-    char* inner = malloc(len-1); // () with null byte
-    strncpy(inner, resp_str, len-2);
+    size_t innersize = len-2+1; // remove \r\n add NULL
+    char* inner = malloc(innersize); // () with null byte
+    snprintf(inner, innersize, "%s", resp_str);
 
     SimpleString_t ss = {
         .value = inner
@@ -32,8 +33,9 @@ static SimpleString_t deserialize_ss(const char* resp_str, size_t len) {
 static Error_t deserialize_error(const char* resp_str, size_t len) {
     assert(len >= 2); // account for -()\r\n
 
-    char* inner = malloc(len-1); // () with null byte
-    strncpy(inner, resp_str, len-2);
+    size_t innersize = len-1;
+    char* inner = malloc(innersize); // () with null byte
+    snprintf(inner, innersize, "%s", resp_str);
 
     Error_t e = {
         .value = inner
@@ -99,22 +101,25 @@ static Array_t deserialize_array(const char* resp_str, size_t len) {
 
 static char* serialize_ss(const SimpleString_t* ss) {
     // 1 for '+', 2 for CRLF, 1 for NULL
-    char* data = malloc(1 + strlen(ss->value) + 2 + 1);
-    sprintf(data, "+%s%s", ss->value, CRLF);
+    size_t size = 1 + strlen(ss->value) + 2 + 1;
+    char* data = malloc(size);
+    snprintf(data, size, "+%s%s", ss->value, CRLF);
     return data;
 }
 static char* serialize_error(const Error_t* err) {    
     // 1 for '-', 2 for CRLF, 1 for NULL
-    char* data = malloc(1 + strlen(err->value) + 2 + 1);
-    sprintf(data, "-%s%s", err->value, CRLF);
+    size_t size = 1 + strlen(err->value) + 2 + 1;
+    char* data = malloc(size);
+    snprintf(data, size, "-%s%s", err->value, CRLF);
     return data;
 }
 static char* serialize_int(const Integer_t* integer) {
     // 1 for ':', 2 for CRLF, 1 for NULL
     char nbuffer[21]; // int64_t in base 10 has max 19 chars + 2 for '-' and NULL
     snprintf(nbuffer, sizeof(nbuffer), "%lld", integer->value);
-    char *data = malloc(1 + strlen(nbuffer) + 2 + 1);
-    sprintf(data, ":%s%s", nbuffer, CRLF);
+    size_t datasize = 1 + strlen(nbuffer) + 2 + 1;
+    char *data = malloc(datasize);
+    snprintf(data, datasize, ":%s%s", nbuffer, CRLF);
     return data;
 }
 
@@ -134,7 +139,8 @@ static char* serialize_bs(const BulkString_t* bs) {
     snprintf(size_str, sizeof(size_str), "%d", bs->size);
     // '$' + int_str + CRLF + data + CRLF + NULL
     data = malloc(1 + strlen(size_str) + 2 + (size_t)bs->size + 2 + 1);
-    sprintf(data, "$%s%s%s%s", size_str, CRLF, (char*)bs->value, CRLF);
+    size_t datasize = 1 + strlen(size_str) + 2 + (size_t)bs->size + 2 + 1;
+    snprintf(data, datasize, "$%s%s%s%s", size_str, CRLF, (char*)bs->value, CRLF);
     return data;
 }
 static char* serialize_array(const Array_t* array) {
@@ -144,8 +150,9 @@ static char* serialize_array(const Array_t* array) {
     snprintf(element_count_size, sizeof(element_count_size), "%d", array->element_count);
     // '*' + element_count_size + CRLF + ....
     // start with just the prefix
-    data = malloc(1 + strlen(element_count_size) + 2 + 1);
-    sprintf(data, "*%s%s", element_count_size, CRLF);
+    size_t datasize = 1 + strlen(element_count_size) + 2 + 1;
+    data = malloc(datasize);
+    snprintf(data, datasize, "*%s%s", element_count_size, CRLF);
     for (int e = 0; e < array->element_count; ++e) {
         char *e_data = serialize_resp(&array->element[e]);
         data = realloc(data, strlen(data) + strlen(e_data) + 1);
