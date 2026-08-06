@@ -1,8 +1,6 @@
 PROJDIRS := .
 
-TESTS_SRC := test_main.c
 MAIN_SRC := main.c
-TESTS_EXE := $(patsubst %.c,%.exe,$(TESTS_SRC))
 MAIN_EXE := $(patsubst %.c,%.exe,$(MAIN_SRC))
 
 HDRFILES := $(shell find $(PROJDIRS) -type f -name "\*.h")
@@ -22,13 +20,14 @@ CC := clang
 
 .PHONY: test main all clean
 
-test: $(TESTS_SRC) $(SRCFILES)
-	$(CC) $(CFLAGS) $^ $(DEPFLAGS) -o $(TESTS_EXE)
-
-main: $(MAIN_SRC) $(SRCFILES)
+build: $(MAIN_SRC) $(SRCFILES)
 	$(CC) $(CFLAGS) $^ $(DEPFLAGS) -o $(MAIN_EXE)
+	chmod a+x $(MAIN_EXE)
 
-all: tests main
+test: build
+	./$(MAIN_EXE) --test
+
+all: build test
 
 clean:
-	rm -rf $(OBJFILES) $(MAIN_EXE) $(TESTS_EXE)
+	rm -rf $(OBJFILES) $(MAIN_EXE)
