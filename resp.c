@@ -1,6 +1,7 @@
 #include "resp.h"
 
 #include <assert.h>
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -9,7 +10,7 @@
 
 static int len_to_next_crlf(const char* str) {
     const size_t len = strlen(str);
-    for (int i = 0; i < (int)len; i += 2) {
+    for (int i = 0; i < (int)len; ++i) {
         if (strncmp(&str[i], CRLF, 2) == 0) {
             return i;
         } 
@@ -66,11 +67,17 @@ static BulkString_t deserialize_bs(const char* resp_str, size_t len) {
         return bs;
     }
 
+    // allocate value
+    bs.value = malloc((size_t)bs.size + 1); // For extra NULL
+
     // skip over CRLF
     const char* value_start = resp_str+next_crlf_len+2;
     const size_t remainder_len = strlen(value_start);
     assert(remainder_len >= 2); // has CRLF at end
-    memcpy(bs.value, value_start, remainder_len);
+    assert(remainder_len-2 == (size_t)bs.size);
+
+    memcpy(bs.value, value_start, (size_t)bs.size);
+    bs.value[bs.size] = '\0';
 
     return bs;
 }

@@ -14,8 +14,20 @@ static void resp_test(char* in) {
 }
 
 static void runtests(void) {
+    // Simple strings
     resp_test((char*)"+OK\r\n");
     resp_test((char*)"+hello world\r\n");
+    // Error strings
+    resp_test((char*)"-Error message\r\n");
+    // Integers
+    // We omit the '+' if integer comes in with a '+'
+    resp_test((char*)":0\r\n");
+    resp_test((char*)":-1230\r\n");
+    resp_test((char*)":4321\r\n");
+    // Bulk strings
+    resp_test((char*)"$5\r\nhello\r\n");
+    resp_test((char*)"$-1\r\n");
+    resp_test((char*)"$3\r\n\xf2\xf4\xf5\r\n");
 }
 
 int main(int argc, char **argv) {
