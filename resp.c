@@ -1,4 +1,5 @@
 #include "resp.h"
+#include "utils.h"
 
 #include <assert.h>
 
@@ -72,9 +73,8 @@ static BulkString_t deserialize_bs(const char* resp_str, size_t len) {
 
     // skip over CRLF
     const char* value_start = resp_str+next_crlf_len+2;
-    const size_t remainder_len = strlen(value_start);
-    assert(remainder_len >= 2); // has CRLF at end
-    assert(remainder_len-2 == (size_t)bs.size);
+    const int remainder_len = len_to_next_crlf(value_start);
+    assert(remainder_len == bs.size);
 
     memcpy(bs.value, value_start, (size_t)bs.size);
     bs.value[bs.size] = '\0';
@@ -83,24 +83,33 @@ static BulkString_t deserialize_bs(const char* resp_str, size_t len) {
 }
 static Array_t deserialize_array(const char* resp_str, size_t len) {
     (void)len;
-    Array_t arr;
+    Array_t arr = {NULL, 0};
     
     // parse out size
     int next_crlf_len = len_to_next_crlf(resp_str);
     char *end = (char *)resp_str+next_crlf_len;
     arr.element_count = (int)strtol(resp_str, &end, 10);
 
+    if (arr.element_count == 0 || arr.element_count == -1) {
+        return arr;
+    }
+
     // skip over CRLF
-    const char* elems_start = resp_str+next_crlf_len+2;
-    const size_t remainder_len = strlen(elems_start);
+    char* elem_start = (char*)resp_str+next_crlf_len+2;
+    char *elem_end = NULL;
+    const size_t remainder_len = strlen(elem_start);
     assert(remainder_len >= 2); // has CRLF at end
 
     arr.element = malloc(sizeof(RespType_t) * (size_t)arr.element_count);
-    int i = 0;
     for (int e = 0; e < arr.element_count; ++e) {
-        next_crlf_len = len_to_next_crlf(elems_start+i);
-        RespType_t rt = deserialize_resp(elems_start+i, (size_t)(next_crlf_len+2-i));
+        next_crlf_len = len_to_next_crlf(elem_start);
+        assert(next_crlf_len != -1);
+        char *data_start = elem_start+next_crlf_len+2;
+        next_crlf_len = len_to_next_crlf(data_start);
+        elem_end = data_start+next_crlf_len+2;
+        RespType_t rt = deserialize_resp(elem_start, (size_t)(elem_end-elem_start));
         *(arr.element+e) = rt;
+        elem_start = elem_end;
     }
 
     return arr;
@@ -162,8 +171,11 @@ static char* serialize_array(const Array_t* array) {
     snprintf(data, datasize, "*%s%s", element_count_size, CRLF);
     for (int e = 0; e < array->element_count; ++e) {
         char *e_data = serialize_resp(&array->element[e]);
-        data = realloc(data, strlen(data) + strlen(e_data) + 1);
-        strcpy(data+strlen(data), e_data);
+        size_t lendata = strlen(data);
+        size_t lenedata = strlen(e_data);
+        data = realloc(data, lendata + lenedata + 1);
+        // +1 as it must include the NULL byte
+        snprintf(data+lendata, lenedata+1, "%s", e_data);
     }
 
     return data;
@@ -243,8 +255,11 @@ void free_resp(RespType_t *resp) {
         {
             Array_t *arr = &resp->array;
             for (int i = 0; i < arr->element_count; ++i) {
-                free(arr->element+i);
+                RespType_t* r = arr->element+i;
+                free_resp(r);
             }
+            // just need to free the first one here
+            free(arr->element);
         }
         default:
             break;
