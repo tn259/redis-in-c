@@ -47,6 +47,16 @@ typedef struct RespType {
     };
 } RespType_t;
 
+typedef enum DeserializeResultEnum {
+    OK,
+    INPUT_INVALID
+} DeserializeResultEnum_t;
+
+typedef struct DeserializeResult {
+    DeserializeResultEnum_t res;
+    size_t len_consumed;
+} DeserializeResult_t;
+
 char* serialize_resp(const RespType_t *resp);
-RespType_t deserialize_resp(const char *resp_str, size_t len);
+DeserializeResult_t deserialize_resp(const char *resp_str, RespType_t* in);
 void free_resp(RespType_t * resp);

@@ -20,99 +20,109 @@ static int len_to_next_crlf(const char* str) {
     return -1;
 }
 
-static SimpleString_t deserialize_ss(const char* resp_str, size_t len) {
-    assert(len >= 2); // account for +()\r\n
+static int deserialize_ss(const char* resp_str, SimpleString_t* ss) {
+    int next_crlf = len_to_next_crlf(resp_str);
+    if (next_crlf < 0) {
+        return -1;
+    }
 
-    size_t innersize = len-2+1; // remove \r\n add NULL
+    size_t innersize = (size_t)next_crlf+1; // add NULL
     char* inner = malloc(innersize); // () with null byte
     snprintf(inner, innersize, "%s", resp_str);
 
-    SimpleString_t ss = {
-        .value = inner
-    };
-    return ss;
+    ss->value = inner;
+    // return string length consumed
+    return next_crlf+2;
 }
-static Error_t deserialize_error(const char* resp_str, size_t len) {
-    assert(len >= 2); // account for -()\r\n
+static int deserialize_error(const char* resp_str, Error_t* e) {
+    int next_crlf = len_to_next_crlf(resp_str);
+    if (next_crlf < 0) {
+        return -1;
+    }
 
-    size_t innersize = len-1;
+    size_t innersize = (size_t)next_crlf+1;
     char* inner = malloc(innersize); // () with null byte
     snprintf(inner, innersize, "%s", resp_str);
 
-    Error_t e = {
-        .value = inner
-    };
-    return e;  
+    e->value = inner;
+    return next_crlf+2;  
 }
-static Integer_t deserialize_int(const char* resp_str, size_t len) {
-    assert(len >= 2); // account for ()\r\n
+static int deserialize_int(const char* resp_str, Integer_t* i) {
+    int next_crlf = len_to_next_crlf(resp_str);
+    if (next_crlf < 0) {
+        return -1;
+    }
 
-    char *end = (char *)resp_str+(int)len-2;
-    Integer_t i = {
-        .value = strtol(resp_str, &end, 10)
-    };
-    return i; 
+    char *end = (char *)resp_str+(int)next_crlf;
+    i->value = strtol(resp_str, &end, 10);
+    return next_crlf+2; 
 }
-static BulkString_t deserialize_bs(const char* resp_str, size_t len) {
-    (void)len;
-    BulkString_t bs;
-
+static int deserialize_bs(const char* resp_str, BulkString_t* bs) {
     // parse out size
     int next_crlf_len = len_to_next_crlf(resp_str);
-    char *end = (char*)resp_str+next_crlf_len;
-    bs.size = (int)strtol(resp_str, &end, 10);
+    if (next_crlf_len < 0) {
+        // error
+        return -1;
+    }
 
-    if (bs.size == -1) {
+    char *end = (char*)resp_str+next_crlf_len;
+    bs->size = (int)strtol(resp_str, &end, 10);
+
+    if (bs->size == -1) {
         // null bulk string
-        bs.value = NULL;
-        return bs;
+        bs->value = NULL;
+        return next_crlf_len+2;
     }
 
     // allocate value
-    bs.value = malloc((size_t)bs.size + 1); // For extra NULL
+    bs->value = malloc((size_t)bs->size + 1); // For extra NULL
 
     // skip over CRLF
     const char* value_start = resp_str+next_crlf_len+2;
     const int remainder_len = len_to_next_crlf(value_start);
-    assert(remainder_len == bs.size);
-
-    memcpy(bs.value, value_start, (size_t)bs.size);
-    bs.value[bs.size] = '\0';
-
-    return bs;
-}
-static Array_t deserialize_array(const char* resp_str, size_t len) {
-    (void)len;
-    Array_t arr = {NULL, 0};
-    
-    // parse out size
-    int next_crlf_len = len_to_next_crlf(resp_str);
-    char *end = (char *)resp_str+next_crlf_len;
-    arr.element_count = (int)strtol(resp_str, &end, 10);
-
-    if (arr.element_count == 0 || arr.element_count == -1) {
-        return arr;
+    if (remainder_len < 0) {
+        // error
+        free(bs->value);
+        return -1;
     }
+
+    memcpy(bs->value, value_start, (size_t)bs->size);
+    bs->value[bs->size] = '\0';
+
+    return remainder_len+2;
+}
+static int deserialize_array(const char* resp_str, Array_t* arr) {
+    // parse out size
+    int consumed = 0;
+    int next_crlf_len = len_to_next_crlf(resp_str);
+    if (next_crlf_len < 0) {
+        // error
+        return -1;
+    }
+    char *end = (char *)resp_str+next_crlf_len;
+    arr->element_count = (int)strtol(resp_str, &end, 10);
+
+    if (arr->element_count == 0 || arr->element_count == -1) {
+        // NULL or empty array
+        return next_crlf_len+2;
+    }
+    consumed += next_crlf_len+2;
 
     // skip over CRLF
     char* elem_start = (char*)resp_str+next_crlf_len+2;
-    char *elem_end = NULL;
-    const size_t remainder_len = strlen(elem_start);
-    assert(remainder_len >= 2); // has CRLF at end
 
-    arr.element = malloc(sizeof(RespType_t) * (size_t)arr.element_count);
-    for (int e = 0; e < arr.element_count; ++e) {
-        next_crlf_len = len_to_next_crlf(elem_start);
-        assert(next_crlf_len != -1);
-        char *data_start = elem_start+next_crlf_len+2;
-        next_crlf_len = len_to_next_crlf(data_start);
-        elem_end = data_start+next_crlf_len+2;
-        RespType_t rt = deserialize_resp(elem_start, (size_t)(elem_end-elem_start));
-        *(arr.element+e) = rt;
-        elem_start = elem_end;
+    arr->element = malloc(sizeof(RespType_t) * (size_t)arr->element_count);
+    for (int e = 0; e < arr->element_count; ++e) {
+        DeserializeResult_t inner_res = deserialize_resp(elem_start, arr->element+e);
+        if (inner_res.res != OK) {
+            free(arr->element);
+            return -1;
+        }
+        elem_start += inner_res.len_consumed;
+        consumed += inner_res.len_consumed;
     }
 
-    return arr;
+    return consumed;
 }
 
 static char* serialize_ss(const SimpleString_t* ss) {
@@ -181,35 +191,46 @@ static char* serialize_array(const Array_t* array) {
     return data;
 }
 
-RespType_t deserialize_resp(const char* resp_str, size_t len) {
-    RespType_t resp;
+DeserializeResult_t deserialize_resp(const char *resp_str, RespType_t* in) {
+    int resp_str_consumed = 0;
+    DeserializeResult_t result = {
+        OK,
+        0
+    };
     switch (resp_str[0]) {
     case '+':
-        resp.simple_string = deserialize_ss(resp_str+1, len-1);
-        resp.type = SIMPLE_STRING;
+        in->type = SIMPLE_STRING;
+        resp_str_consumed = deserialize_ss(resp_str+1, &in->simple_string);
         break;
     case '-':
-        resp.error = deserialize_error(resp_str+1, len-1);
-        resp.type = ERROR;
+        in->type = ERROR;
+        resp_str_consumed = deserialize_error(resp_str+1, &in->error);
         break;
     case ':':
-        resp.integer = deserialize_int(resp_str+1, len-1);
-        resp.type = INTEGER;
+        in->type = INTEGER;
+        resp_str_consumed = deserialize_int(resp_str+1, &in->integer);
         break;
     case '$':
-        resp.bulkstring = deserialize_bs(resp_str+1, len-1);
-        resp.type = BULKSTRING;
+        in->type = BULKSTRING;
+        resp_str_consumed = deserialize_bs(resp_str+1, &in->bulkstring);
         break;
     case '*':
-        resp.array = deserialize_array(resp_str+1, len-1);
-        resp.type = ARRAY;
+        in->type = ARRAY;
+        resp_str_consumed = deserialize_array(resp_str+1, &in->array);
         break;
     default:
         printf("Unknown resp type char %c", resp_str[0]);
-        resp.type = UNKNOWN;
+        in->type = UNKNOWN;
         break;
     }
-    return resp;
+
+    if (resp_str_consumed > 0) {
+        result.len_consumed = (size_t)resp_str_consumed;
+    } else {
+        result.res = INPUT_INVALID;
+    }
+
+    return result;
 }
 
 char* serialize_resp(const RespType_t *resp) {

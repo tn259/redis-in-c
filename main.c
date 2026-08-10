@@ -10,7 +10,12 @@
 
 
 static void resp_test(char* in) {
-    RespType_t r = deserialize_resp(in, strlen(in));
+    RespType_t r = {
+        UNKNOWN,
+        {0}
+    };
+    DeserializeResult_t d_result = deserialize_resp(in, &r);
+    assert(d_result.res == OK);
     char *out = serialize_resp(&r);
     if (PRINT_DEBUG) {
         puts("-------");
@@ -45,7 +50,7 @@ static void runtests(void) {
     resp_test((char*)"*0\r\n"); // empty
     resp_test((char*)"*-1\r\n"); // null array
     resp_test((char*)"*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n"); // 2 values
-
+    resp_test((char*)"*3\r\n:1\r\n:2\r\n:3\r\n");
 }
 
 int main(int argc, char **argv) {
