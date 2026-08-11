@@ -51,6 +51,10 @@ static void runtests(void) {
     resp_test((char*)"*-1\r\n"); // null array
     resp_test((char*)"*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n"); // 2 values
     resp_test((char*)"*3\r\n:1\r\n:2\r\n:3\r\n");
+    // Array with null BS inside
+    resp_test((char*)"*3\r\n$5\r\nhello\r\n$-1\r\n$5\r\nworld\r\n");
+    // Nested array and mixed elements
+    resp_test((char*)"*2\r\n*3\r\n:1\r\n:2\r\n:3\r\n*3\r\n+Hello\r\n$3\r\nSTU\r\n-World\r\n");
 }
 
 int main(int argc, char **argv) {
