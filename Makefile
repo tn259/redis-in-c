@@ -27,7 +27,7 @@ build: $(MAIN_SRC) $(SRCFILES)
 	chmod a+x $(MAIN_EXE)
 
 test: build
-	./$(MAIN_EXE) --test
+	ASAN_OPTIONS=detect_leaks=1 ./$(MAIN_EXE) --test
 
 all: build test
 

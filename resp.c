@@ -187,6 +187,7 @@ static char* serialize_array(const Array_t* array) {
         data = realloc(data, lendata + lenedata + 1);
         // +1 as it must include the NULL byte
         snprintf(data+lendata, lenedata+1, "%s", e_data);
+        free(e_data);
     }
 
     return data;
