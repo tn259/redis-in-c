@@ -89,7 +89,8 @@ static int deserialize_bs(const char* resp_str, BulkString_t* bs) {
     memcpy(bs->value, value_start, (size_t)bs->size);
     bs->value[bs->size] = '\0';
 
-    return remainder_len+2;
+    int consumed = next_crlf_len+2 + remainder_len+2;
+    return consumed;
 }
 static int deserialize_array(const char* resp_str, Array_t* arr) {
     // parse out size
@@ -219,11 +220,13 @@ DeserializeResult_t deserialize_resp(const char *resp_str, RespType_t* in) {
         resp_str_consumed = deserialize_array(resp_str+1, &in->array);
         break;
     default:
-        printf("Unknown resp type char %c", resp_str[0]);
+        printf("Unknown resp type char %c\n", resp_str[0]);
         in->type = UNKNOWN;
         break;
     }
 
+    // In each case we've also consumed the type char
+    resp_str_consumed += 1;
     if (resp_str_consumed > 0) {
         result.len_consumed = (size_t)resp_str_consumed;
     } else {
