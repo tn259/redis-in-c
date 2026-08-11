@@ -80,7 +80,7 @@ static int deserialize_bs(const char* resp_str, BulkString_t* bs) {
     // skip over CRLF
     const char* value_start = resp_str+next_crlf_len+2;
     const int remainder_len = len_to_next_crlf(value_start);
-    if (remainder_len < 0) {
+    if (remainder_len < 0 || bs->size != remainder_len) {
         // error
         free(bs->value);
         return -1;
