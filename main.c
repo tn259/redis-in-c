@@ -73,6 +73,11 @@ static void runtests(void) {
     resp_test_invalid((char*)"$4\rqwer\r\n");
     resp_test_invalid((char*)"$4\r\nqwer\n");
     resp_test_invalid((char*)"$3\r\nqwer\r\n");
+    // Invalid array
+    // bad crlf after element count
+    resp_test_invalid((char*)"*2\r:1\r\n:2\r\n");
+    // more elements than count
+    //resp_test_invalid((char*)"*1\r\n:1\r\n:2\r\n");
 }
 
 int main(int argc, char **argv) {

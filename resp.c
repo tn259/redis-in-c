@@ -3,9 +3,11 @@
 
 #include <assert.h>
 
+#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 #define CRLF "\r\n"
 
@@ -92,6 +94,19 @@ static int deserialize_bs(const char* resp_str, BulkString_t* bs) {
     int consumed = next_crlf_len+2 + remainder_len+2;
     return consumed;
 }
+static bool element_count_is_valid(const char* resp_str, char* count_end) {
+    int idx_end = (int)(count_end-resp_str);
+    int i = 0;
+    if (resp_str[0] == '-') {
+        ++i;
+    }
+    for (; i < idx_end; ++i) {
+        if (isdigit(resp_str[i]) == 0) {
+            return false;
+        }
+    }
+    return true;
+}
 static int deserialize_array(const char* resp_str, Array_t* arr) {
     // parse out size
     int consumed = 0;
@@ -101,6 +116,9 @@ static int deserialize_array(const char* resp_str, Array_t* arr) {
         return -1;
     }
     char *end = (char *)resp_str+next_crlf_len;
+    if (!element_count_is_valid(resp_str, end)) {
+        return -1;
+    }
     arr->element_count = (int)strtol(resp_str, &end, 10);
 
     if (arr->element_count == 0 || arr->element_count == -1) {
