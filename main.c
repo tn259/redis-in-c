@@ -76,8 +76,15 @@ static void runtests(void) {
     // Invalid array
     // bad crlf after element count
     resp_test_invalid((char*)"*2\r:1\r\n:2\r\n");
-    // more elements than count
-    //resp_test_invalid((char*)"*1\r\n:1\r\n:2\r\n");
+    // more elements than count is fine but will be truncated
+    //resp_test_ok((char*)"*1\r\n:1\r\n:2\r\n");
+    // less elements than count - elements need freeing on error
+    resp_test_invalid((char*)"*3\r\n:1\r\n:2\r\n");
+    resp_test_invalid((char*)"*3\r\n$4\r\npoiu\r\n:2\r\n");
+    resp_test_invalid((char*)"*10\r\n$4\r\npoiu\r\n+SS\r\n-EE\r\n");
+    resp_test_invalid((char*)"*10\r\n$4\r\npoiu\r\n+SS\r\n-EE\r\n$0\r\n\r\n$-1\r\n");
+    resp_test_invalid((char*)"*10\r\n$4\r\npoiu\r\n+SS\r\n-EE\r\n*0\r\n*-1\r\n");
+    resp_test_invalid((char*)"*10\r\n$4\r\npoiu\r\n+SS\r\n-EE\r\n*2\r\n+QW\r\n$2\r\nER\r\n");
 }
 
 int main(int argc, char **argv) {

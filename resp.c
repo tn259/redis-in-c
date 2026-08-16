@@ -134,6 +134,11 @@ static int deserialize_array(const char* resp_str, Array_t* arr) {
     for (int e = 0; e < arr->element_count; ++e) {
         DeserializeResult_t inner_res = deserialize_resp(elem_start, arr->element+e);
         if (inner_res.res != OK) {
+            // free items that were valid prior to the
+            // invalid one
+            for (int ee = 0; ee < e; ++ee) {
+                free_resp(arr->element+ee);
+            }
             free(arr->element);
             return -1;
         }
@@ -245,7 +250,9 @@ DeserializeResult_t deserialize_resp(const char *resp_str, RespType_t* in) {
     }
 
     // In each case we've also consumed the type char
-    resp_str_consumed += 1;
+    if (in->type != UNKNOWN) {
+        resp_str_consumed += 1;
+    }
     if (resp_str_consumed > 0) {
         result.len_consumed = (size_t)resp_str_consumed;
     } else {
@@ -297,6 +304,10 @@ void free_resp(RespType_t *resp) {
         case ARRAY:
         {
             Array_t *arr = &resp->array;
+            // NULL or empty array not malloc'd
+            if (arr->element_count == 0 || arr->element_count == -1) {
+                break;
+            }
             for (int i = 0; i < arr->element_count; ++i) {
                 RespType_t* r = arr->element+i;
                 free_resp(r);
