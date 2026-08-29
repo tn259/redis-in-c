@@ -1,5 +1,7 @@
 #include "resp.h"
+#include "server.h"
 #include "utils.h"
+#include "command.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -35,6 +37,15 @@ static void resp_test_invalid(char* in) {
     };
     DeserializeResult_t d_result = deserialize_resp(in, &r);
     assert(d_result.res == INPUT_INVALID);
+}
+static void command_test(char* in, char* expected) {
+    char responsebuf[BUF_SIZE];
+    handle_command(in, responsebuf);
+    hexstring(responsebuf);
+    assert(strncasecmp(responsebuf, expected, strlen(expected)) == 0);
+}
+static void ping_test(void) {
+    command_test((char*)"*1\r\n$4\r\nPING\r\n", (char*)"$4\r\nPONG\r\n");
 }
 
 static void runtests(void) {
@@ -85,6 +96,8 @@ static void runtests(void) {
     resp_test_invalid((char*)"*10\r\n$4\r\npoiu\r\n+SS\r\n-EE\r\n$0\r\n\r\n$-1\r\n");
     resp_test_invalid((char*)"*10\r\n$4\r\npoiu\r\n+SS\r\n-EE\r\n*0\r\n*-1\r\n");
     resp_test_invalid((char*)"*10\r\n$4\r\npoiu\r\n+SS\r\n-EE\r\n*2\r\n+QW\r\n$2\r\nER\r\n");
+
+    ping_test();
 }
 
 int main(int argc, char **argv) {
@@ -95,6 +108,8 @@ int main(int argc, char **argv) {
             return 0;
         }
     }
+
+    serve();
 
     return 0;
 }

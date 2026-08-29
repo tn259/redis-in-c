@@ -60,3 +60,7 @@ typedef struct DeserializeResult {
 char* serialize_resp(const RespType_t *resp);
 DeserializeResult_t deserialize_resp(const char *resp_str, RespType_t* in);
 void free_resp(RespType_t * resp);
+
+void copy_bs(BulkString_t* dst, BulkString_t* src);
+BulkString_t create_bs(char* str);
+void print_bs(BulkString_t* bs);

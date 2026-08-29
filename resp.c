@@ -319,3 +319,29 @@ void free_resp(RespType_t *resp) {
             break;
     }
 }
+
+void copy_bs(BulkString_t* dst, BulkString_t* src) {
+    print_bs(src);
+    dst->size = src->size;
+    dst->value = malloc((size_t)dst->size+1);
+    memcpy(dst->value, src->value, (size_t)dst->size);
+    dst->value[dst->size] = '\0'; // ensure null termination when casting to char*
+}
+
+BulkString_t create_bs(char* str) {
+    size_t len = strlen(str);
+    BulkString_t bs = {
+        .size = (int)len,
+        .value = malloc(len+1)
+    };
+    memcpy(bs.value, str, len);
+    bs.value[bs.size] = '\0';
+    return bs;
+}
+
+void print_bs(BulkString_t* bs) {
+    for (int i = 0; i < bs->size; ++i) {
+        printf("%c", bs->value[i]);
+    }
+    printf("\n");
+}
