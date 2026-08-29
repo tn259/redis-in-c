@@ -53,6 +53,7 @@ static void handle_client(int fd) {
     int flags = 0;
     while ((read = recv(fd, request_buffer, sizeof request_buffer, flags)) > 0) {
         if (!handle_command(request_buffer, response_buffer)) {
+            printf("Skipped %s\n", request_buffer);
             continue;
         }
         ssize_t sent = send(fd, response_buffer, sizeof response_buffer, flags);
@@ -89,19 +90,19 @@ void serve(void) {
     struct addrinfo *p;
     for (p = servinfo; p != NULL; p = p->ai_next) {
         if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
-            perror("server: socket");
+            perror("server: socket\n");
             continue;
         }
 
         int yes = 1;
         if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
-            perror("server: setsockopt");
+            perror("server: setsockopt\n");
             continue;
         }
 
         if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
             close(sockfd);
-            perror("server: bind");
+            perror("server: bind\n");
             continue;
         }
 
@@ -117,7 +118,7 @@ void serve(void) {
     }
 
     if (listen(sockfd, BACKLOG) == -1) {
-        perror("server: listen");
+        perror("server: listen\n");
         exit(1);
     }
 
@@ -126,7 +127,7 @@ void serve(void) {
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;
     if (sigaction(SIGCHLD, &sa, NULL) == -1) {
-        perror("server: sigaction");
+        perror("server: sigaction\n");
         exit(1);
     }
 
@@ -139,19 +140,18 @@ void serve(void) {
         struct sockaddr* their_addr = (struct sockaddr*)&their_addr_storage;
         int new_fd = accept(sockfd, their_addr, &addr_size);
         if (new_fd == -1) {
-            perror("server: accept");
+            perror("server: accept\n");
             continue;
         }
 
         // print client
         char s[INET6_ADDRSTRLEN];
         inet_ntop(their_addr_storage.ss_family, get_in_addr(their_addr), s, sizeof s);
-        printf("server: connection from %s", s);
+        printf("server: connection from %s\n", s);
 
         if (!fork()) {
             // child
             handle_client(new_fd);
-            close(sockfd);
         } else {
             // parent carries on
             close(new_fd);
