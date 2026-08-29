@@ -46,6 +46,7 @@ static void command_test(char* in, char* expected) {
 }
 static void ping_test(void) {
     command_test((char*)"*1\r\n$4\r\nPING\r\n", (char*)"$4\r\nPONG\r\n");
+    command_test((char*)"*2\r\n$4\r\nPING\r\n$5\r\nHola!\r\n", (char*)"$5\r\nHola!\r\n");
 }
 
 static void runtests(void) {
