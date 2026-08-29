@@ -49,6 +49,10 @@ static void ping_test(void) {
     command_test((char*)"*2\r\n$4\r\nPING\r\n$5\r\nHola!\r\n", (char*)"$5\r\nHola!\r\n");
 }
 
+static void echo_test(void) {
+    command_test((char*)"*2\r\n$4\r\nECHO\r\n$11\r\nhello world\r\n", (char*)"$11\r\nhello world\r\n");
+}
+
 static void runtests(void) {
     // Simple strings
     resp_test_ok((char*)"+OK\r\n");
@@ -99,6 +103,7 @@ static void runtests(void) {
     resp_test_invalid((char*)"*10\r\n$4\r\npoiu\r\n+SS\r\n-EE\r\n*2\r\n+QW\r\n$2\r\nER\r\n");
 
     ping_test();
+    echo_test();
 }
 
 int main(int argc, char **argv) {
