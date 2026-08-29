@@ -52,10 +52,7 @@ static void handle_client(int fd) {
     char response_buffer[BUF_SIZE];
     int flags = 0;
     while ((read = recv(fd, request_buffer, sizeof request_buffer, flags)) > 0) {
-        if (!handle_command(request_buffer, response_buffer)) {
-            printf("Skipped %s\n", request_buffer);
-            continue;
-        }
+        handle_command(request_buffer, response_buffer);
         ssize_t sent = send(fd, response_buffer, sizeof response_buffer, flags);
         if (sent == -1) {
             perror("server: send");

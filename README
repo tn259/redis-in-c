@@ -1,10 +1,6 @@
 # Running TODOS
 
-## Step 1
-
-- Add libusan, libasan, libtsan checking
-- Write exhaustive tests from RESP spec examples
-
 ## Step 2
 
-- Read Beej's guide to network programming
+- Infrastructure for command errors - unknown/incorrect syntax
+- kqueue vs multi-process implementation

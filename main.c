@@ -44,13 +44,28 @@ static void command_test(char* in, char* expected) {
     hexstring(responsebuf);
     assert(strncasecmp(responsebuf, expected, strlen(expected)) == 0);
 }
+static void invalid_command_test(char* in) {
+    char responsebuf[BUF_SIZE];
+    handle_command(in, responsebuf);
+    printf("%s\n", responsebuf);
+    assert(responsebuf[0] == '-');
+}
 static void ping_test(void) {
     command_test((char*)"*1\r\n$4\r\nPING\r\n", (char*)"$4\r\nPONG\r\n");
     command_test((char*)"*2\r\n$4\r\nPING\r\n$5\r\nHola!\r\n", (char*)"$5\r\nHola!\r\n");
 }
-
 static void echo_test(void) {
     command_test((char*)"*2\r\n$4\r\nECHO\r\n$11\r\nhello world\r\n", (char*)"$11\r\nhello world\r\n");
+}
+static void bad_command_test(void) {
+    // not an array
+    invalid_command_test((char*)"$4\r\nPING\r\n");
+    // not all bulk strings
+    invalid_command_test((char*)"*1\r\n+OK\r\n");
+    // unknown command
+    invalid_command_test((char*)"*1\r\n$5\r\nthing\r\n");
+    // bad echo
+    invalid_command_test((char*)"*1\r\n$4\r\nECHO\r\n");
 }
 
 static void runtests(void) {
@@ -104,6 +119,7 @@ static void runtests(void) {
 
     ping_test();
     echo_test();
+    bad_command_test();
 }
 
 int main(int argc, char **argv) {

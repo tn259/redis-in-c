@@ -44,41 +44,51 @@ static bool parse_echo(RespType_t* in, Command_t* out) {
     return true;
 }
 
-bool parse_command(char* in, Command_t* out) {
+CommandError_t parse_command(char* in, Command_t* out) {
     // Deseralize resp and check result
     RespType_t resp;
-    memset(&resp, 0, sizeof(resp));
+    memset(&resp, 0, sizeof(RespType_t));
+    CommandError_t command_err;
+    memset(&command_err, 0, sizeof(CommandError_t));
+    command_err.type = COMMAND_OK;
     DeserializeResult_t res = deserialize_resp(in, &resp);
     if (res.res != OK) {
         free_resp(&resp);
-        return false;
+        command_err.type = SYNTAX;
+        command_err.message = (char*)"invalid resp syntax";
+        return command_err;
     }
     // Must be an array of bulk strings
     if (resp.type != ARRAY) {
-        fprintf(stderr, "parse_command: command request must be an array");
         free_resp(&resp);
-        return false;
+        command_err.type = SYNTAX;
+        command_err.message = (char*)"request is not a resp array";
+        return command_err;
     }
     Array_t arr = resp.array;
     for (int i = 0; i < arr.element_count; ++i) {
         if (arr.element[i].type != BULKSTRING) {
-            fprintf(stderr, "parse_command: command request array must comprise of bulk strings");
             free_resp(&resp);
-            return false;
+            command_err.type = SYNTAX;
+            command_err.message = (char*)"request array has an element not of type bulk string";
+            return command_err;
         }
     }
     // find the first space for the command
     BulkString_t* command = &resp.array.element->bulkstring;
-    bool parse_res = true;
     if (is_command(command, (char*)PING)) {
         parse_ping(&resp, out);
     } else if (is_command(command, (char*)ECHO)) {
-        parse_res = parse_echo(&resp, out);
+        if (!parse_echo(&resp, out)) {
+            command_err.type = SYNTAX;
+            command_err.message = (char*)"bad echo request";
+        }
     } else {
-        parse_res = false;
+        command_err.type = UNKNOWN_COMMAND;
+        command_err.message = (char*)"unknown command";
     }
     free_resp(&resp);
-    return parse_res; 
+    return command_err; 
 }
 
 static void handle_ping(Command_t* req, RespType_t* response) {
@@ -100,7 +110,7 @@ static void handle_echo(Command_t* req, RespType_t* response) {
     copy_bs(&response->bulkstring, msg);
 }
 
-bool generate_response(Command_t* in, char* out) {
+void generate_response(Command_t* in, char* out) {
     RespType_t resp_response;
     memset(&resp_response, 0, sizeof(RespType_t));
     switch (in->type) {
@@ -111,8 +121,9 @@ bool generate_response(Command_t* in, char* out) {
             handle_echo(in, &resp_response);
             break;
         default:
-            fprintf(stderr, "handle_command: unknown command");
-            return false;
+            // should not get here
+            assert(false);
+            break;
     }
     char* serialized_resp = serialize_resp(&resp_response);
     size_t len = strlen(serialized_resp);
@@ -121,7 +132,6 @@ bool generate_response(Command_t* in, char* out) {
     free_resp(&resp_response);
     free(serialized_resp);
     free_command(in);
-    return true;
 }
 
 void free_command(Command_t* command) {
@@ -135,21 +145,37 @@ void free_command(Command_t* command) {
             free(command->echo.message.value);
             break;
         default:
-            fprintf(stderr, "free_command: unknown command %d", command->type);
+            assert(false);
     }
 }
 
-bool handle_command(char* command_req, char* command_res) {
+void handle_command(char* command_req, char* command_res) {
     Command_t command;
     memset(&command, 0, sizeof(Command_t));
-    if (!parse_command(command_req, &command)) {
-        fprintf(stderr, "server: handle_client: %s", command_req);
-        return false;
+    CommandError_t err = parse_command(command_req, &command);
+    if (err.type == COMMAND_OK) {
+        generate_response(&command, command_res);
+    } else {
+        generate_error_response(&err, command_res);
     }
-    if (!generate_response(&command, command_res)) {
-        fprintf(stderr, "server: handle_command: %s", command_res);
-        return false;
-    }
-    return true;
 }
 
+void generate_error_response(CommandError_t* error, char* out) {
+    RespType_t resp;
+    memset(&resp, 0, sizeof(RespType_t));
+    resp.type = ERROR;
+    switch (error->type) {
+        case OK:
+            return;
+        case UNKNOWN_COMMAND:
+        case SYNTAX:
+            resp.error.value = error->message;
+            break;
+        default:
+            resp.error.value = (char*)"Unknown error";
+    }
+    char* resp_str = serialize_resp(&resp);
+    // should not need to free resp or command error because it does not own the message memory
+    snprintf(out, strlen(resp_str), "%s", resp_str);
+    free(resp_str);
+}
