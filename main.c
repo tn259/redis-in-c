@@ -47,6 +47,7 @@ static void command_test(char* in, char* expected) {
 static void invalid_command_test(char* in) {
     char responsebuf[BUF_SIZE];
     handle_command(in, responsebuf);
+    hexstring(responsebuf);
     printf("%s\n", responsebuf);
     assert(responsebuf[0] == '-');
 }

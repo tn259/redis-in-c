@@ -55,14 +55,14 @@ CommandError_t parse_command(char* in, Command_t* out) {
     if (res.res != OK) {
         free_resp(&resp);
         command_err.type = SYNTAX;
-        command_err.message = (char*)"invalid resp syntax";
+        command_err.message = (char*)"ERR invalid resp syntax";
         return command_err;
     }
     // Must be an array of bulk strings
     if (resp.type != ARRAY) {
         free_resp(&resp);
         command_err.type = SYNTAX;
-        command_err.message = (char*)"request is not a resp array";
+        command_err.message = (char*)"ERR request is not a resp array";
         return command_err;
     }
     Array_t arr = resp.array;
@@ -70,7 +70,7 @@ CommandError_t parse_command(char* in, Command_t* out) {
         if (arr.element[i].type != BULKSTRING) {
             free_resp(&resp);
             command_err.type = SYNTAX;
-            command_err.message = (char*)"request array has an element not of type bulk string";
+            command_err.message = (char*)"ERR request array has an element not of type bulk string";
             return command_err;
         }
     }
@@ -81,11 +81,11 @@ CommandError_t parse_command(char* in, Command_t* out) {
     } else if (is_command(command, (char*)ECHO)) {
         if (!parse_echo(&resp, out)) {
             command_err.type = SYNTAX;
-            command_err.message = (char*)"bad echo request";
+            command_err.message = (char*)"ERR bad echo request";
         }
     } else {
         command_err.type = UNKNOWN_COMMAND;
-        command_err.message = (char*)"unknown command";
+        command_err.message = (char*)"ERR unknown command";
     }
     free_resp(&resp);
     return command_err; 
@@ -172,10 +172,10 @@ void generate_error_response(CommandError_t* error, char* out) {
             resp.error.value = error->message;
             break;
         default:
-            resp.error.value = (char*)"Unknown error";
+            resp.error.value = (char*)"ERR Unknown error";
     }
     char* resp_str = serialize_resp(&resp);
     // should not need to free resp or command error because it does not own the message memory
-    snprintf(out, strlen(resp_str), "%s", resp_str);
+    snprintf(out, strlen(resp_str)+1, "%s", resp_str);
     free(resp_str);
 }
