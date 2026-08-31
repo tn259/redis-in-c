@@ -2,11 +2,14 @@
 #include "server.h"
 #include "utils.h"
 #include "command.h"
+#include "hash.h"
 
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <stdint.h>
 
 #define PRINT_DEBUG 1
 
@@ -123,7 +126,22 @@ static void runtests(void) {
     bad_command_test();
 }
 
+static int generate_rand(void) {
+    // 1. Seed the random number generator using the current time
+    // This should only be called ONCE at the start of your program.
+    srand((unsigned int)time(NULL));
+
+    // 2. Generate a random number within a specific range (e.g., 1 to 100)
+    int min = 1;
+    int max = 100;
+    int random_num = (rand() % (max - min + 1)) + min;
+    return random_num;
+}
+
 int main(int argc, char **argv) {
+    // TODO: change when loading resp files
+    derive_secret((uint64_t)generate_rand());
+
     if (argc > 1) {
         if (strcmp(argv[1], "--test") == 0) {
             puts("Running tests\n");
