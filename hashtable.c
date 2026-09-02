@@ -24,6 +24,7 @@ typedef struct NodeResult {
 static HTNode_t** ht;
 
 static size_t current_size = HT_BUCKETS_SIZE;
+static size_t num_elements = 0;
 
 void ht_init(void) {
     derive_secret((uint64_t)generate_rand());
@@ -60,6 +61,17 @@ void ht_print(void) {
         printf("\n");
     }
     printf("\n");
+}
+static void ht_resize(size_t new_size) {
+    if (new_size == current_size) {
+        return;
+    }
+    if (new_size < current_size) {
+        // ensure the remainder are not leaked
+        // TODO
+    }
+    ht = realloc(ht, sizeof(HTNode_t) * new_size);
+    current_size = new_size;
 }
 
 /* returns the previous node before the node */
@@ -105,6 +117,9 @@ bool ht_set(char* key, BulkString_t* in_value) {
     HTNode_t* prev = result.prev;
     HTNode_t* node = result.node;
     if (node == NULL) {
+        if (RESIZE && (num_elements + 1 >= current_size / 2)) {
+            ht_resize(current_size * 2);
+        }
         if (prev == NULL) {
             // insert at bucket head
             ht[idx] = new_node(key, in_value);
@@ -112,6 +127,7 @@ bool ht_set(char* key, BulkString_t* in_value) {
             // insert new node
             prev->next = new_node(key, in_value);
         }
+        ++num_elements;
     } else {
         // overwrite
         copy_bs(node->value, in_value);
