@@ -31,23 +31,29 @@ void ht_init(void) {
     ht = malloc(sizeof(HTNode_t) * current_size);
     memset(ht, 0, sizeof(HTNode_t) * current_size);
 }
-void ht_free(void) {
-    for (size_t i = 0; i < current_size; ++i) {
-        HTNode_t* node = ht[i];
-        if (node == NULL) {
-            continue;
-        }
-        while (node != NULL) {
-            HTNode_t* next = node->next;
-            HTNode_t* tmp_node = node;
-            free(tmp_node->key);
-            free(tmp_node->value->value);
-            free(tmp_node->value);
-            free(tmp_node);
-            node = next;
+
+static void private_ht_free(size_t size, HTNode_t** the_ht, bool include_nodes) {
+    if (include_nodes) {
+        for (size_t i = 0; i < size; ++i) {
+            HTNode_t* node = the_ht[i];
+            if (node == NULL) {
+                continue;
+            }
+            while (node != NULL) {
+                HTNode_t* next = node->next;
+                HTNode_t* tmp_node = node;
+                free(tmp_node->key);
+                free(tmp_node->value->value);
+                free(tmp_node->value);
+                free(tmp_node);
+                node = next;
+            }
         }
     }
-    free(ht);
+    free(the_ht);
+}
+void ht_free(void) {
+    private_ht_free(current_size, ht, true);
 }
 void ht_print(void) {
     for (size_t i = 0; i < current_size; ++i) {
@@ -62,6 +68,31 @@ void ht_print(void) {
     }
     printf("\n");
 }
+static uint64_t key_index(char* key, size_t size) {
+    return hash(key) % size;
+}
+
+static void ht_rekey(size_t new_size, HTNode_t** new_ht) {
+    for (size_t i = 0; i < current_size; ++i) {
+        if (ht[i] == NULL) {
+            continue;
+        }
+        HTNode_t* node = ht[i]; 
+        while (node != NULL) {
+            uint64_t new_idx = key_index(node->key, new_size);
+            if (new_ht[new_idx] == NULL) {
+                new_ht[new_idx] = node;
+            } else {
+                HTNode_t* other_node = new_ht[new_idx];
+                for (; other_node->next != NULL; other_node = other_node->next) {}
+                other_node->next = node;
+            }
+            HTNode_t* prev = node;
+            node = node->next;
+            prev->next = NULL;
+        }
+    }
+}
 static void ht_resize(size_t new_size) {
     if (new_size == current_size) {
         return;
@@ -70,7 +101,12 @@ static void ht_resize(size_t new_size) {
         // ensure the remainder are not leaked
         // TODO
     }
-    ht = realloc(ht, sizeof(HTNode_t) * new_size);
+    HTNode_t** new_ht = malloc(sizeof(HTNode_t) * new_size);
+    memset(new_ht, 0, sizeof(HTNode_t) * new_size);
+    ht_rekey(new_size, new_ht);
+    HTNode_t** old_ht = ht;
+    ht = new_ht;
+    private_ht_free(current_size, old_ht, false);
     current_size = new_size;
 }
 
@@ -110,8 +146,7 @@ static HTNode_t* new_node(char* key, BulkString_t* in_value) {
 }
 
 bool ht_set(char* key, BulkString_t* in_value) {
-    uint64_t digest = hash(key);
-    uint64_t idx = digest % current_size;
+    uint64_t idx = key_index(key, current_size);
     NodeResult_t result = find_node_with_idx(key, idx);
     // TODO resize
     HTNode_t* prev = result.prev;

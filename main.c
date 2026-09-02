@@ -71,6 +71,7 @@ static void bad_command_test(void) {
     invalid_command_test((char*)"*1\r\n$4\r\nECHO\r\n");
 }
 static void ht_test(void) {
+    ht_init();
     ht_print();
     char* key1 = (char*)"qaz";
     char* key2 = (char*)"wsx";
@@ -85,8 +86,11 @@ static void ht_test(void) {
     ht_set(key1, &bs1);
     ht_print();
     ht_set(key2, &bs1);
+    ht_print();
     ht_set(key3, &bs1);
+    ht_print();
     ht_set(key4, &bs1);
+    ht_print();
     ht_get(key1, &out);
     ht_print();
     assert(out.type == BULKSTRING);
@@ -96,6 +100,12 @@ static void ht_test(void) {
     free(bs1.value);
     free(bs2.value);
     free_resp(&out);
+    ht_free();
+}
+static void set_get_test(void) {
+    ht_init();
+    command_test((char*)"*2\r\n$3\r\nGET\r\n$5\r\nmykey\r\n", (char*)"_\r\n");
+    //command_test((char*)"*3\r\n$3\r\nSET\r\n$6\r\nqwerty\r\n", (char*)"+OK\r\n");
     ht_free();
 }
 
@@ -153,12 +163,12 @@ static void runtests(void) {
     bad_command_test();
 
     ht_test();
+
+    set_get_test();
 }
 
 
 int main(int argc, char **argv) {
-    ht_init();
-
     if (argc > 1) {
         if (strcmp(argv[1], "--test") == 0) {
             puts("Running tests\n");
@@ -166,7 +176,7 @@ int main(int argc, char **argv) {
             return 0;
         }
     }
-
+    ht_init();
     serve();
 
     return 0;
