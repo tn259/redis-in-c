@@ -105,7 +105,8 @@ static void ht_test(void) {
 static void set_get_test(void) {
     ht_init();
     command_test((char*)"*2\r\n$3\r\nGET\r\n$5\r\nmykey\r\n", (char*)"_\r\n");
-    //command_test((char*)"*3\r\n$3\r\nSET\r\n$6\r\nqwerty\r\n", (char*)"+OK\r\n");
+    command_test((char*)"*3\r\n$3\r\nSET\r\n$6\r\nqwerty\r\n$2\r\n23\r\n", (char*)"+OK\r\n");
+    command_test((char*)"*2\r\n$3\r\nGET\r\n$6\r\nqwerty\r\n", (char*)"$2\r\n23\r\n");
     ht_free();
 }
 
