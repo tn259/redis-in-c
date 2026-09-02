@@ -10,6 +10,9 @@
 #include <stdbool.h>
 
 #define CRLF "\r\n"
+#define NULL_BS "$-1\r\n"
+#define NULL_REPLY "_\r\n"
+
 
 static int len_to_next_crlf(const char* str) {
     const size_t len = strlen(str);
@@ -22,6 +25,17 @@ static int len_to_next_crlf(const char* str) {
     return -1;
 }
 
+static int deserialize_null(const char* resp_str, Null_t* n) {
+    n->nothing = NULL;
+    if (strcmp(resp_str, NULL_REPLY) != 0) {
+        return -1;
+    }
+    int next_crlf = len_to_next_crlf(resp_str);
+    if (next_crlf < 0) {
+        return -1;
+    }
+    return next_crlf+2;
+}
 static int deserialize_ss(const char* resp_str, SimpleString_t* ss) {
     int next_crlf = len_to_next_crlf(resp_str);
     if (next_crlf < 0) {
@@ -173,8 +187,11 @@ static char* serialize_int(const Integer_t* integer) {
     return data;
 }
 
-#define NULL_BS "$-1\r\n"
-
+static char* serialize_null(void) {
+    char* data = malloc(sizeof(NULL_REPLY)+1);
+    strcpy(data, NULL_REPLY);
+    return data;
+}
 static char* serialize_bs(const BulkString_t* bs) {
     char *data;
 
@@ -243,6 +260,10 @@ DeserializeResult_t deserialize_resp(const char *resp_str, RespType_t* in) {
         in->type = ARRAY;
         resp_str_consumed = deserialize_array(resp_str+1, &in->array);
         break;
+    case '_':
+        in->type = NULL_RESP;
+        resp_str_consumed = deserialize_null(resp_str+1, &in->null);
+        break;
     default:
         printf("Unknown resp type char %c\n", resp_str[0]);
         in->type = UNKNOWN;
@@ -280,6 +301,9 @@ char* serialize_resp(const RespType_t *resp) {
             break;
         case ARRAY:
             str = serialize_array(&resp->array);
+            break;
+        case NULL_RESP:
+            str = serialize_null();
             break;
         default:
             printf("Unknown resp type %d", resp->type);
@@ -321,9 +345,8 @@ void free_resp(RespType_t *resp) {
 }
 
 void copy_bs(BulkString_t* dst, BulkString_t* src) {
-    print_bs(src);
     dst->size = src->size;
-    dst->value = malloc((size_t)dst->size+1);
+    dst->value = realloc(dst->value, (size_t)dst->size+1);
     memcpy(dst->value, src->value, (size_t)dst->size);
     dst->value[dst->size] = '\0'; // ensure null termination when casting to char*
 }
@@ -339,9 +362,26 @@ BulkString_t create_bs(char* str) {
     return bs;
 }
 
-void print_bs(BulkString_t* bs) {
+void print_bs(BulkString_t* bs, bool newline) {
+    printf("BS{ ");
     for (int i = 0; i < bs->size; ++i) {
         printf("%c", bs->value[i]);
     }
-    printf("\n");
+    printf("}");
+    if (newline) {
+        printf("\n");
+    }
+}
+
+void respond_ok(RespType_t* resp) {
+    resp->type = SIMPLE_STRING;
+    resp->simple_string = (SimpleString_t) {
+        .value = malloc(3),
+    };
+    strcpy(resp->simple_string.value, "OK");
+}
+
+void respond_null(RespType_t* resp) {
+    resp->type = NULL_RESP;
+    resp->null = (Null_t) {.nothing = NULL};
 }

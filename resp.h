@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
 
@@ -27,13 +28,18 @@ typedef struct Array {
     int element_count;
 } Array_t;
 
+typedef struct Null {
+    void* nothing; 
+} Null_t;
+
 typedef enum RespTypeEnum {
     SIMPLE_STRING,
     ERROR,
     INTEGER,
     BULKSTRING,
     ARRAY,
-    UNKNOWN
+    UNKNOWN,
+    NULL_RESP
 } RespTypeEnum_t;
 
 typedef struct RespType { 
@@ -44,6 +50,7 @@ typedef struct RespType {
         Integer_t integer;
         BulkString_t bulkstring;
         Array_t array;
+        Null_t null;
     };
 } RespType_t;
 
@@ -63,4 +70,9 @@ void free_resp(RespType_t * resp);
 
 void copy_bs(BulkString_t* dst, BulkString_t* src);
 BulkString_t create_bs(char* str);
-void print_bs(BulkString_t* bs);
+void print_bs(BulkString_t* bs, bool newline);
+
+void respond_ok(RespType_t* resp);
+void respond_null(RespType_t* resp);
+
+

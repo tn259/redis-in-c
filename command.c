@@ -7,6 +7,7 @@
 #include "resp.h"
 #include "command.h"
 #include "utils.h"
+#include "hashtable.h"
 
 static bool is_command(BulkString_t* in, char* cmd) {
     return strncasecmp((char*)in->value, cmd, strlen(cmd)) == 0;
@@ -41,6 +42,46 @@ static bool parse_echo(RespType_t* in, Command_t* out) {
     };
     copy_bs(&echo.message, bs);
     out->echo = echo;
+    return true;
+}
+static bool parse_set(RespType_t* in, Command_t* out) {
+    out->type = SET_T;
+    if (in->array.element_count < 3) {
+        // need at least SET <key> <value>
+        return false;
+    }
+    BulkString_t* key = &in->array.element[1].bulkstring; 
+    BulkString_t* value = &in->array.element[2].bulkstring; 
+    SetCommand_t set = {
+        .key = (BulkString_t) {
+            .size = 0,
+            .value = NULL
+        },
+        .value = (BulkString_t) {
+            .size = 0,
+            .value = NULL
+        }
+    };
+    copy_bs(&set.key, key);
+    copy_bs(&set.value, value);
+    out->set = set;
+    return true;
+}
+static bool parse_get(RespType_t* in, Command_t* out) {
+    out->type = GET_T;
+    if (in->array.element_count != 2) {
+        // Must be GET <value>
+        return false;
+    }
+    BulkString_t* key = &in->array.element[1].bulkstring; 
+    GetCommand_t get = {
+        .key = (BulkString_t){
+            .size = 0,
+            .value = NULL
+        }
+    };
+    copy_bs(&get.key, key);
+    out->get = get;
     return true;
 }
 
@@ -83,6 +124,16 @@ CommandError_t parse_command(char* in, Command_t* out) {
             command_err.type = SYNTAX;
             command_err.message = (char*)"ERR bad echo request";
         }
+    } else if (is_command(command, (char*)SET)) {
+       if (!parse_set(&resp, out)) {
+            command_err.type = SYNTAX;
+            command_err.message = (char*)"ERR bad set request";
+       }
+    } else if (is_command(command, (char*)GET)) {
+        if (!parse_get(&resp, out)) {
+            command_err.type = SYNTAX;
+            command_err.message = (char*)"ERR bad get request";
+        }
     } else {
         command_err.type = UNKNOWN_COMMAND;
         command_err.message = (char*)"ERR unknown command";
@@ -109,6 +160,21 @@ static void handle_echo(Command_t* req, RespType_t* response) {
     assert(msg != NULL);
     copy_bs(&response->bulkstring, msg);
 }
+static void handle_set(Command_t* req, RespType_t* response) {
+    if (!ht_set((char*)req->set.key.value, &req->set.value)) {
+        response->type = BULKSTRING;
+        // null bulk string
+        response->bulkstring = (BulkString_t){
+            .size = -1,
+            .value = NULL
+        };
+    } else {
+        respond_ok(response);
+    }
+}
+static void handle_get(Command_t* req, RespType_t* response) {
+    ht_get((char*)req->get.key.value, response);
+}
 
 void generate_response(Command_t* in, char* out) {
     RespType_t resp_response;
@@ -119,6 +185,12 @@ void generate_response(Command_t* in, char* out) {
             break;
         case ECHO_T:
             handle_echo(in, &resp_response);
+            break;
+        case SET_T:
+            handle_set(in, &resp_response);
+            break;
+        case GET_T:
+            handle_get(in, &resp_response);
             break;
         default:
             // should not get here
@@ -143,6 +215,13 @@ void free_command(Command_t* command) {
             break;
         case ECHO_T:
             free(command->echo.message.value);
+            break;
+        case SET_T:
+            free(command->set.key.value);
+            free(command->set.value.value);
+            break;
+        case GET_T:
+            free(command->get.key.value);
             break;
         default:
             assert(false);

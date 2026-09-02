@@ -5,13 +5,18 @@
 #define PING "PING"
 #define PONG "PONG"
 
+#define SET "SET"
+#define GET "GET"
+
 #define ECHO "ECHO"
 
 #include "resp.h"
 
 typedef enum CommandType {
     PING_T,
-    ECHO_T
+    ECHO_T,
+    SET_T,
+    GET_T,
 } CommandType_t;
 
 // Commands contain their RESP type constituents
@@ -21,11 +26,20 @@ typedef struct PingCommand {
 typedef struct EchoCommand {
     BulkString_t message;
 } EchoCommand_t;
+typedef struct SetCommand {
+    BulkString_t key;
+    BulkString_t value;
+} SetCommand_t;
+typedef struct GetCommand {
+    BulkString_t key;
+} GetCommand_t;
 typedef struct Command {
     CommandType_t type;
     union {
         PingCommand_t ping;
         EchoCommand_t echo;
+        SetCommand_t set;
+        GetCommand_t get;
     };
 } Command_t;
 

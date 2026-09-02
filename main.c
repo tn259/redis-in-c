@@ -2,13 +2,12 @@
 #include "server.h"
 #include "utils.h"
 #include "command.h"
-#include "hash.h"
+#include "hashtable.h"
 
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <stdint.h>
 
 #define PRINT_DEBUG 1
@@ -71,6 +70,34 @@ static void bad_command_test(void) {
     // bad echo
     invalid_command_test((char*)"*1\r\n$4\r\nECHO\r\n");
 }
+static void ht_test(void) {
+    ht_print();
+    char* key1 = (char*)"qaz";
+    char* key2 = (char*)"wsx";
+    char* key3 = (char*)"edc";
+    char* key4 = (char*)"rfv";
+    BulkString_t bs1 = create_bs((char*)"12345");
+    BulkString_t bs2 = create_bs((char*)"09876");
+    RespType_t out;
+    memset(&out, 0, sizeof(RespType_t));
+    ht_get(key1, &out);
+    assert(out.type == NULL_RESP);
+    ht_set(key1, &bs1);
+    ht_print();
+    ht_set(key2, &bs1);
+    ht_set(key3, &bs1);
+    ht_set(key4, &bs1);
+    ht_get(key1, &out);
+    ht_print();
+    assert(out.type == BULKSTRING);
+    ht_set(key2, &bs2);
+    ht_print();
+
+    free(bs1.value);
+    free(bs2.value);
+    free_resp(&out);
+    ht_free();
+}
 
 static void runtests(void) {
     // Simple strings
@@ -124,23 +151,13 @@ static void runtests(void) {
     ping_test();
     echo_test();
     bad_command_test();
+
+    ht_test();
 }
 
-static int generate_rand(void) {
-    // 1. Seed the random number generator using the current time
-    // This should only be called ONCE at the start of your program.
-    srand((unsigned int)time(NULL));
-
-    // 2. Generate a random number within a specific range (e.g., 1 to 100)
-    int min = 1;
-    int max = 100;
-    int random_num = (rand() % (max - min + 1)) + min;
-    return random_num;
-}
 
 int main(int argc, char **argv) {
-    // TODO: change when loading resp files
-    derive_secret((uint64_t)generate_rand());
+    ht_init();
 
     if (argc > 1) {
         if (strcmp(argv[1], "--test") == 0) {
