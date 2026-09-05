@@ -1,5 +1,4 @@
 # Running TODOS
 
-## Step 2
-
-- kqueue vs multi-process implementation
+- Stitch together messages over TCP
+- Fix hashtable issue with resize

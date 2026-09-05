@@ -107,6 +107,8 @@ static void set_get_test(void) {
     command_test((char*)"*2\r\n$3\r\nGET\r\n$5\r\nmykey\r\n", (char*)"_\r\n");
     command_test((char*)"*3\r\n$3\r\nSET\r\n$6\r\nqwerty\r\n$2\r\n23\r\n", (char*)"+OK\r\n");
     command_test((char*)"*2\r\n$3\r\nGET\r\n$6\r\nqwerty\r\n", (char*)"$2\r\n23\r\n");
+    invalid_command_test((char*)"*1\r\n$3\r\nGET\r\n");
+    invalid_command_test((char*)"*2\r\n$3\r\nSET\r\n$4\r\npoiu\r\n");
     ht_free();
 }
 

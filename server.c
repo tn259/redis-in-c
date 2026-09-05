@@ -11,16 +11,17 @@
 #include <errno.h>
 #include <signal.h>
 #include <assert.h>
+#include <fcntl.h>
 
 #include "server.h"
 #include "command.h"
 #include "utils.h"
 
 #define PORT "6379"
-#define MAX_EVENTS 32
+#define MAX_EVENTS 100000
 
 // Pending connections in queue
-#define BACKLOG 10
+#define BACKLOG 10000
 
 // get sockaddr, IPv4 or IPv6:
 static void *get_in_addr(struct sockaddr *sa)
@@ -39,17 +40,38 @@ static void handle_client_once(int fd) {
     char request_buffer[BUF_SIZE];
     char response_buffer[BUF_SIZE];
     int flags = 0;
-    ssize_t read = recv(fd, request_buffer, sizeof request_buffer, flags);
-    if (read <= 0) {
-        printf("server: client disconnected on fd %d\n", fd);
-        close(fd); // automatically removes from kqueue
-    } else {
-        handle_command(request_buffer, response_buffer);
-        ssize_t sent = send(fd, response_buffer, sizeof response_buffer, flags);
-        if (sent == -1) {
-            perror("server: send\n");
-        } 
+    while (true) {
+        ssize_t read = recv(fd, request_buffer, sizeof request_buffer, flags);
+        if (read < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                printf("EAGAIN\n");
+                break;
+            }
+            perror("recv error");
+            close(fd); // automatically removes from kqueue
+            break;
+        } else if (read > 0) {
+            request_buffer[read] = '\0';
+            printf("REQUEST fd %d: %s\n", fd, request_buffer);
+            handle_command(request_buffer, response_buffer);
+            ssize_t sent = send(fd, response_buffer, strlen(response_buffer), flags);
+            printf("RESPONSE fd %d: %s\n", fd, response_buffer);
+            if (sent == -1) {
+                perror("server: send\n");
+            } 
+        } else {
+            printf("read 0 bytes from fd %d\n", fd);
+            close(fd);
+            break;
+        }
     }
+}
+
+// Utility function to set a socket to non-blocking mode
+static int make_socket_non_blocking(int fd) {
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags == -1) return -1;
+    return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
 void serve(void) {
@@ -111,6 +133,11 @@ void serve(void) {
         exit(1);
     }
 
+    if (make_socket_non_blocking(sockfd) == -1) {
+        perror("fcntl non-blocking failed");
+        exit(1);
+    }
+
     printf("server: awaiting connections...\n");
 
     int kq;
@@ -123,22 +150,29 @@ void serve(void) {
     }
 
     // Register server socket to watch for incoming read events (connections)    
-    EV_SET(change_list, sockfd, EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, NULL);
+    EV_SET(change_list, sockfd, EVFILT_READ, EV_ADD | EV_ENABLE | EV_CLEAR, 0, 0, NULL);
     if (kevent(kq, change_list, 1, NULL, 0, NULL) == -1) {
         perror("server: kevent registration failed\n");
         exit(1);
     }
 
+    struct timespec timeout;
+    timeout.tv_sec = 1;  // 1 seconds
+    timeout.tv_nsec = 0; // 0 nanoseconds
+
     while (true) {
-        int new_events = kevent(kq, NULL, 0, event_list, MAX_EVENTS, NULL);
+        int new_events = kevent(kq, NULL, 0, event_list, MAX_EVENTS, &timeout);
         if (new_events < 0) {
             perror("server: kevent wait failed\n");
             exit(1);
         }
+        printf("new_events %d\n", new_events);
 
         // Process events
         for (int i = 0; i < new_events; ++i) {
             int current_fd = (int)event_list[i].ident;
+            printf("event: fd=%d filter=%d flags=0x%x data=%ld\n",
+                current_fd, event_list[i].filter, event_list[i].flags, event_list[i].data);
 
             // Handle errors
             if (event_list[i].flags & EV_ERROR) {
@@ -147,29 +181,46 @@ void serve(void) {
                 continue;
             }
 
+            if (event_list[i].flags & EV_EOF) {
+                printf("client disconnected on fd %d, flushing\n", current_fd);
+                handle_client_once(current_fd);
+                close(current_fd);
+                continue;
+            }
+
             // Case 1: New incoming connection
             if (sockfd == current_fd) {
-                // accept
-                struct sockaddr_storage their_addr_storage;
-                socklen_t addr_size = sizeof their_addr_storage;
-                struct sockaddr* their_addr = (struct sockaddr*)&their_addr_storage;
-                int new_fd = accept(sockfd, their_addr, &addr_size);
-                if (new_fd == -1) {
-                    perror("server: accept\n");
-                    continue;
-                }
-                
-                // Register new client fd for incoming read events
-                EV_SET(change_list, new_fd, EVFILT_READ, EV_ADD, 0, 0, NULL);
-                if (kevent(kq, change_list, 1, NULL, 0, NULL) < 0) {
-                    perror("server: kevent wait failed on new connection\n");
-                    exit(1);
-                }
+                while (true) {
+                    // accept
+                    struct sockaddr_storage their_addr_storage;
+                    socklen_t addr_size = sizeof their_addr_storage;
+                    struct sockaddr* their_addr = (struct sockaddr*)&their_addr_storage;
+                    int new_fd = accept(sockfd, their_addr, &addr_size);
+                    if (new_fd == -1) {
+                        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                            // all pending connections are drained
+                            break;
+                        }
+                        perror("server: accept\n");
+                        continue;
+                    }
+                    if (make_socket_non_blocking(new_fd) == -1) {
+                        perror("fcntl non-blocking failed on new_fd");
+                        exit(1);
+                    }
+                    
+                    // Register new client fd for incoming read events
+                    EV_SET(change_list, new_fd, EVFILT_READ, EV_ADD, 0, 0, NULL);
+                    if (kevent(kq, change_list, 1, NULL, 0, NULL) < 0) {
+                        perror("server: kevent wait failed on new connection\n");
+                        exit(1);
+                    }
 
-                // print client
-                char s[INET6_ADDRSTRLEN];
-                inet_ntop(their_addr_storage.ss_family, get_in_addr(their_addr), s, sizeof s);
-                printf("server: connection from %s\n", s);
+                    // print client
+                    char s[INET6_ADDRSTRLEN];
+                    inet_ntop(their_addr_storage.ss_family, get_in_addr(their_addr), s, sizeof s);
+                    printf("server: connection from %s on fd %d\n", s, new_fd);
+                }
             // Case 2: Data to read on connection
             } else if (event_list[i].filter == EVFILT_READ) {
                 handle_client_once(current_fd);

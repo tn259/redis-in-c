@@ -2,7 +2,7 @@
 
 #include <stdbool.h>
 
-#define RESIZE true
+#define RESIZE false
 
 typedef struct BulkString BulkString_t;
 typedef struct RespType RespType_t;

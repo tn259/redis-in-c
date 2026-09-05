@@ -265,6 +265,7 @@ DeserializeResult_t deserialize_resp(const char *resp_str, RespType_t* in) {
         resp_str_consumed = deserialize_null(resp_str+1, &in->null);
         break;
     default:
+        printf("%s\n", resp_str);
         printf("Unknown resp type char %c\n", resp_str[0]);
         in->type = UNKNOWN;
         break;
