@@ -96,6 +96,30 @@ static void ht_test(void) {
     assert(out.type == BULKSTRING);
     ht_set(key2, &bs2);
     ht_print();
+    
+    for (int i = 0; i < 26; ++i) {
+        char key[2] = {
+            (char)(0x41 + i),
+            0x00
+        };
+        ht_set(key, &bs1);
+        ht_print();
+    }
+    for (int i = 0; i < 26; ++i) {
+        RespType_t out2;
+        memset(&out2, 0, sizeof(RespType_t));
+        char key[2] = {
+            (char)(0x41 + i),
+            0x00
+        };
+        ht_get(key, &out2);
+        printf("%s\n", key);
+        if (out2.type != BULKSTRING) {
+            ht_get(key, &out2);
+        }
+        assert(out2.type == BULKSTRING);
+        free_resp(&out2);
+    }
 
     free(bs1.value);
     free(bs2.value);

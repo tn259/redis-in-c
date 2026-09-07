@@ -129,11 +129,6 @@ static NodeResult_t find_node_with_idx(char* key, uint64_t idx) {
         .prev = prev_node,
     };
 }
-static NodeResult_t find_node(char* key) {
-    uint64_t digest = hash(key);
-    uint64_t idx = digest % current_size;
-    return find_node_with_idx(key, idx);
-}
 static HTNode_t* new_node(char* key, BulkString_t* in_value) {
     HTNode_t* node = malloc(sizeof(HTNode_t));
     node->key = malloc(strlen(key)+1);
@@ -151,10 +146,18 @@ bool ht_set(char* key, BulkString_t* in_value) {
     // TODO resize
     HTNode_t* prev = result.prev;
     HTNode_t* node = result.node;
-    if (node == NULL) {
+    bool found = node != NULL;
+    if (!found) {
         if (RESIZE && (num_elements + 1 >= current_size / 2)) {
             ht_resize(current_size * 2);
+            idx = key_index(key, current_size);
+            result = find_node_with_idx(key, idx);
+            prev = result.prev;
+            node = result.node;
+            found = node != NULL;
         }
+    }
+    if (!found) {
         if (prev == NULL) {
             // insert at bucket head
             ht[idx] = new_node(key, in_value);
@@ -171,7 +174,8 @@ bool ht_set(char* key, BulkString_t* in_value) {
     return true;
 }
 void ht_get(char* key, RespType_t* out_value) {
-    NodeResult_t result = find_node(key);
+    uint64_t idx = key_index(key, current_size);
+    NodeResult_t result = find_node_with_idx(key, idx);
     if (result.node != NULL) {
         out_value->type = BULKSTRING;
         copy_bs(&out_value->bulkstring, result.node->value);
