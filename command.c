@@ -85,61 +85,170 @@ static bool parse_get(RespType_t* in, Command_t* out) {
     return true;
 }
 
-CommandError_t parse_command(char* in, Command_t* out) {
+static void deserialize_command_bs(char* resp_str, size_t resp_len, BulkString_t* bs, CommandRequestParseResult_t* result) {
+    int next_crlf_len = len_to_next_crlf(resp_str+result->consumed);
+    if (next_crlf_len < 0 || result->consumed+(size_t)next_crlf_len+2 > resp_len) {
+        result->error_state.type = COMMAND_OK;
+        result->completion_state = COMMAND_INCOMPLETE;
+        result->consumed += strlen(resp_str+result->consumed);
+        return; 
+    }
+
+    char *end = (char*)resp_str+result->consumed+next_crlf_len;
+    bs->size = (int)strtol(resp_str+result->consumed, &end, 10);
+
+    result->consumed += (size_t)next_crlf_len+2;
+    if (bs->size == -1) {
+        // null bulk string
+        bs->value = NULL;
+        result->error_state.type = COMMAND_OK;
+        result->completion_state = COMMAND_COMPLETE;
+        return;
+    }
+
+    // allocate value
+    bs->value = malloc((size_t)bs->size + 1); // For extra NULL
+
+    // skip over CRLF
+    const char* value_start = resp_str+result->consumed;
+    const int remainder_len = len_to_next_crlf(value_start);
+    if (remainder_len < 0 || result->consumed+(size_t)(remainder_len+2) > resp_len) {
+        result->error_state.type = COMMAND_OK;
+        result->completion_state = COMMAND_INCOMPLETE;
+        result->consumed += strlen(resp_str+result->consumed);
+        free(bs->value);
+        return; 
+    }
+    if (bs->size != remainder_len) {
+        // error
+        result->error_state.type = SYNTAX;
+        result->completion_state = COMMAND_COMPLETE;
+        result->error_state.message = (char*)"Invalid Bulk String length in array";
+        free(bs->value);
+        return;
+    }
+
+    memcpy(bs->value, value_start, (size_t)bs->size);
+    bs->value[bs->size] = '\0';
+
+    result->consumed += (size_t)(remainder_len+2);
+}
+
+static void deserialize_command_array(char* resp_str, size_t resp_len, Array_t* arr, CommandRequestParseResult_t* result) {
+    int next_crlf_len = len_to_next_crlf(resp_str+result->consumed);
+    if (next_crlf_len < 0 || (size_t)next_crlf_len+2 > resp_len) {
+        result->completion_state = COMMAND_INCOMPLETE;
+        result->error_state.type = COMMAND_OK;
+        result->consumed += strlen(resp_str);
+        return; 
+    }
+
+    char *end = (char *)resp_str+next_crlf_len;
+    if (!element_count_is_valid(resp_str+result->consumed, end)) {
+        result->completion_state = COMMAND_COMPLETE;
+        result->error_state.type = SYNTAX;
+        result->error_state.message = (char*)"Command array element count invalid";
+        return;
+    }
+    arr->element_count = (int)strtol(resp_str+result->consumed, &end, 10);
+    result->consumed += (size_t)next_crlf_len+2;
+
+    if (arr->element_count == 0 || arr->element_count == -1) {
+        // NULL or empty array
+        result->completion_state = COMMAND_COMPLETE;
+        result->error_state.type = COMMAND_OK;
+        return;    
+    }
+
+    bool element_parse_fail = false;
+    arr->element = malloc(sizeof(RespType_t) * (size_t)arr->element_count);
+    int e = 0;
+    for (; e < arr->element_count; ++e) {
+        if (resp_str[result->consumed] != '$') {
+            // element is not a BS
+            result->consumed += 1;
+            result->completion_state = COMMAND_COMPLETE;
+            result->error_state.type = SYNTAX;
+            result->error_state.message = (char*)"Non bulk string found in array";
+            element_parse_fail = true;
+            goto dca_end;
+        }
+        result->consumed += 1;
+        RespType_t* resp_element = arr->element+e;
+        resp_element->type = BULKSTRING;
+        deserialize_command_bs(resp_str, resp_len, &resp_element->bulkstring, result);
+        if (result->completion_state != COMMAND_COMPLETE || result->error_state.type != COMMAND_OK) {
+            element_parse_fail = true;
+            goto dca_end;
+        }
+    }
+
+    dca_end:
+        if (element_parse_fail) {
+            // free items that were valid prior to the
+            // invalid one
+            for (int ee = 0; ee < e; ++ee) {
+                free_resp(arr->element+ee);
+            }
+            free(arr->element);
+        }
+}
+
+static CommandRequestParseResult_t deserialize_command(char* resp_str, size_t buflen, RespType_t* resp) {
+    CommandRequestParseResult_t result = {
+        .completion_state = COMMAND_COMPLETE,
+        .consumed = 0,
+        .error_state = (CommandError_t) {
+            .type = COMMAND_OK,
+            .message = NULL
+        }
+    };
+    if (resp_str[0] != '*') {
+        result.completion_state = COMMAND_COMPLETE;
+        result.error_state.type = SYNTAX;
+        result.error_state.message = (char*)"Resp command is not an array";
+        return result;
+    }
+    result.consumed += 1;
+    resp->type = ARRAY;
+    deserialize_command_array(resp_str, buflen, &resp->array, &result);
+    return result;
+}
+
+CommandRequestParseResult_t parse_command(char* in, size_t inlen, Command_t* out) {
     // Deseralize resp and check result
     RespType_t resp;
     memset(&resp, 0, sizeof(RespType_t));
-    CommandError_t command_err;
-    memset(&command_err, 0, sizeof(CommandError_t));
-    command_err.type = COMMAND_OK;
-    DeserializeResult_t res = deserialize_resp(in, &resp);
-    if (res.res != OK) {
-        free_resp(&resp);
-        command_err.type = SYNTAX;
-        command_err.message = (char*)"ERR invalid resp syntax";
-        return command_err;
+    CommandRequestParseResult_t res = deserialize_command(in, inlen, &resp);
+    if (res.completion_state != COMMAND_COMPLETE || res.error_state.type != COMMAND_OK) {
+        return res;
     }
-    // Must be an array of bulk strings
-    if (resp.type != ARRAY) {
-        free_resp(&resp);
-        command_err.type = SYNTAX;
-        command_err.message = (char*)"ERR request is not a resp array";
-        return command_err;
-    }
-    Array_t arr = resp.array;
-    for (int i = 0; i < arr.element_count; ++i) {
-        if (arr.element[i].type != BULKSTRING) {
-            free_resp(&resp);
-            command_err.type = SYNTAX;
-            command_err.message = (char*)"ERR request array has an element not of type bulk string";
-            return command_err;
-        }
-    }
+
     // find the first space for the command
     BulkString_t* command = &resp.array.element->bulkstring;
     if (is_command(command, (char*)PING)) {
         parse_ping(&resp, out);
     } else if (is_command(command, (char*)ECHO)) {
         if (!parse_echo(&resp, out)) {
-            command_err.type = SYNTAX;
-            command_err.message = (char*)"ERR bad echo request";
+            res.error_state.type = SYNTAX;
+            res.error_state.message = (char*)"ERR bad echo request";
         }
     } else if (is_command(command, (char*)SET)) {
        if (!parse_set(&resp, out)) {
-            command_err.type = SYNTAX;
-            command_err.message = (char*)"ERR bad set request";
+            res.error_state.type = SYNTAX;
+            res.error_state.message = (char*)"ERR bad set request";
        }
     } else if (is_command(command, (char*)GET)) {
         if (!parse_get(&resp, out)) {
-            command_err.type = SYNTAX;
-            command_err.message = (char*)"ERR bad get request";
+            res.error_state.type = SYNTAX;
+            res.error_state.message = (char*)"ERR bad get request";
         }
     } else {
-        command_err.type = UNKNOWN_COMMAND;
-        command_err.message = (char*)"ERR unknown command";
+        res.error_state.type = UNKNOWN_COMMAND;
+        res.error_state.message = (char*)"ERR unknown command";
     }
     free_resp(&resp);
-    return command_err; 
+    return res; 
 }
 
 static void handle_ping(Command_t* req, RespType_t* response) {
@@ -228,15 +337,18 @@ void free_command(Command_t* command) {
     }
 }
 
-void handle_command(char* command_req, char* command_res) {
+CommandRequestParseResult_t handle_command(char* command_req, size_t request_len, char* command_res) {
     Command_t command;
     memset(&command, 0, sizeof(Command_t));
-    CommandError_t err = parse_command(command_req, &command);
-    if (err.type == COMMAND_OK) {
-        generate_response(&command, command_res);
-    } else {
-        generate_error_response(&err, command_res);
+    CommandRequestParseResult_t res = parse_command(command_req, request_len, &command);
+    if (res.completion_state == COMMAND_COMPLETE) {
+        if (res.error_state.type == COMMAND_OK) {
+            generate_response(&command, command_res);
+        } else {
+            generate_error_response(&res.error_state, command_res);
+        }
     }
+    return res;
 }
 
 void generate_error_response(CommandError_t* error, char* out) {

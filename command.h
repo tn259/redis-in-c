@@ -54,14 +54,23 @@ typedef struct CommandError {
     char* message;
 } CommandError_t;
 
+typedef enum CommandRequestParseState {
+    COMMAND_INCOMPLETE,
+    COMMAND_COMPLETE
+} CommandRequestParseState_t;
 
+typedef struct CommandRequestParseResult {
+    CommandRequestParseState_t completion_state;
+    size_t consumed;
+    CommandError_t error_state;
+} CommandRequestParseResult_t;
 
 // Interface assumes RESP encoded in and RESP encoded out
 /*
 in - resp encoded cmd string
 out - parsed command
 */
-CommandError_t parse_command(char* in, Command_t* out);
+CommandRequestParseResult_t parse_command(char* in, size_t inlen, Command_t* out);
 /*
 req - Command
 out - resp encoded response
@@ -75,6 +84,6 @@ void free_command(Command_t* command);
 command_req - resp encoded command request
 command_res - resp encoded command response
 */
-void handle_command(char* command_req, char* command_res);
+CommandRequestParseResult_t handle_command(char* command_req, size_t request_len, char* command_res);
 
 void generate_error_response(CommandError_t* err, char* out);

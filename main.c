@@ -42,13 +42,17 @@ static void resp_test_invalid(char* in) {
 }
 static void command_test(char* in, char* expected) {
     char responsebuf[BUF_SIZE];
-    handle_command(in, responsebuf);
+    CommandRequestParseResult_t res = handle_command(in, strlen(in), responsebuf);
+    assert(res.completion_state == COMMAND_COMPLETE);
+    assert(res.error_state.type == COMMAND_OK);
     hexstring(responsebuf);
     assert(strncasecmp(responsebuf, expected, strlen(expected)) == 0);
 }
 static void invalid_command_test(char* in) {
     char responsebuf[BUF_SIZE];
-    handle_command(in, responsebuf);
+    CommandRequestParseResult_t res = handle_command(in, strlen(in), responsebuf);
+    assert(res.completion_state == COMMAND_COMPLETE);
+    assert(res.error_state.type != COMMAND_OK);
     hexstring(responsebuf);
     printf("%s\n", responsebuf);
     assert(responsebuf[0] == '-');

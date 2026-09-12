@@ -64,6 +64,9 @@ typedef struct DeserializeResult {
     size_t len_consumed;
 } DeserializeResult_t;
 
+int len_to_next_crlf(const char* str);
+bool element_count_is_valid(const char* resp_str, char* count_end);
+
 char* serialize_resp(const RespType_t *resp);
 DeserializeResult_t deserialize_resp(const char *resp_str, RespType_t* in);
 void free_resp(RespType_t * resp);

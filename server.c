@@ -22,6 +22,16 @@
 
 // Pending connections in queue
 #define BACKLOG 10000
+#define MAX_CONNECTIONS BACKLOG
+
+typedef struct ConnectionState {
+    char request_buffer[BUF_SIZE];
+    char response_buffer[BUF_SIZE];
+    size_t received;
+    size_t sent;
+} ConnectionState_t;
+
+static ConnectionState_t connection_states[MAX_CONNECTIONS] = { 0 };
 
 // get sockaddr, IPv4 or IPv6:
 static void *get_in_addr(struct sockaddr *sa)
@@ -37,11 +47,10 @@ static void *get_in_addr(struct sockaddr *sa)
 
 // client handler with connection fd
 static void handle_client_once(int fd) {
-    char request_buffer[BUF_SIZE];
-    char response_buffer[BUF_SIZE];
+    ConnectionState_t conn_state = connection_states[fd];
     int flags = 0;
     while (true) {
-        ssize_t read = recv(fd, request_buffer, sizeof request_buffer, flags);
+        ssize_t read = recv(fd, conn_state.request_buffer + conn_state.received, sizeof conn_state.request_buffer - conn_state.received, flags);
         if (read < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 printf("EAGAIN\n");
@@ -51,14 +60,31 @@ static void handle_client_once(int fd) {
             close(fd); // automatically removes from kqueue
             break;
         } else if (read > 0) {
-            request_buffer[read] = '\0';
-            printf("REQUEST fd %d: %s\n", fd, request_buffer);
-            handle_command(request_buffer, response_buffer);
-            ssize_t sent = send(fd, response_buffer, strlen(response_buffer), flags);
-            printf("RESPONSE fd %d: %s\n", fd, response_buffer);
-            if (sent == -1) {
-                perror("server: send\n");
-            } 
+            size_t buflen = conn_state.received+(size_t)read;
+            conn_state.request_buffer[buflen] = '\0';
+            printf("REQUEST fd %d: %s\n", fd, conn_state.request_buffer);
+            CommandRequestParseResult_t state = handle_command(conn_state.request_buffer, buflen, conn_state.response_buffer);
+            if (state.completion_state == COMMAND_COMPLETE) {
+                ssize_t sent = send(fd, conn_state.response_buffer, strlen(conn_state.response_buffer), flags);
+                printf("RESPONSE fd %d: %s\n", fd, conn_state.response_buffer);
+                if (sent == -1) {
+                    perror("server: send\n");
+                }
+                // reset state and continue
+                memset(&conn_state, 0, sizeof(conn_state));
+            } else {
+                conn_state.received += (size_t)read;
+                if (state.error_state.type != COMMAND_OK) {
+                    // It's incomplete and already errorneous - bail with error message
+                    ssize_t sent = send(fd, conn_state.response_buffer, strlen(conn_state.response_buffer), flags);
+                    printf("RESPONSE fd %d: %s\n", fd, conn_state.response_buffer);
+                    if (sent == -1) {
+                        perror("server: send\n");
+                    }
+                    close(fd);
+                    break;
+                }
+            }
         } else {
             printf("read 0 bytes from fd %d\n", fd);
             close(fd);

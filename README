@@ -1,4 +1,14 @@
 # Running TODOS
 
 - Stitch together messages over TCP
-- Fix hashtable issue with resize
+
+The buffer needs to survive across recv() calls, per connection. Right now request_buffer is a stack-local array inside handle_client_once, freshly allocated on every call and thrown away when it returns. With EV_CLEAR (edge-triggered) you already learned you must drain everything available — but "everything available" can still be a partial command (e.g. you get 40 of the 77 bytes of a PING burst because the rest hasn't arrived on the wire yet). If you throw the buffer away between events, you lose those partial bytes and can never reassemble the command. So you need per-connection state — a buffer plus a "how many valid bytes are currently sitting in it" counter — that lives as long as the connection does, not as long as one handle_client_once call.
+
+Don't try to pre-validate "n complete arrays" before parsing. What you actually want is an incremental/resumable parser: attempt to parse one command starting at the front of whatever's currently buffered. Two outcomes:
+
+Complete — the parser tells you how many bytes it consumed for that one command. Process it, respond, then slide the remaining unconsumed bytes down (or just advance an offset) and immediately try parsing another command from what's left — no new recv() needed if there's already a full second command sitting in the buffer (exactly your CONFIG GET save / CONFIG GET appendonly case from earlier, or the redis-cli startup burst).
+Incomplete — the parser runs out of buffered bytes partway through (e.g. the $16\r\n bulk-string header is there but only 10 of the 16 value bytes have arrived). In that case, stop, keep the partial bytes in the buffer as-is, and go back to waiting on kevent() for more data on that fd — appending the next recv()'s bytes onto the tail of what's already buffered rather than overwriting it.
+
+So the loop shape per read-event is: append newly-recv()'d bytes to the connection's buffer → while(buffer has a complete command) { parse it, respond, advance past consumed bytes } → leave any leftover partial bytes in place for next time.
+
+One more thing this forces you to fix, which ties back to the very first bug in this whole thread: your parser currently finds message boundaries by scanning for \r\n in a null-terminated C string (strlen-based). That assumption breaks once you're deliberately keeping a buffer that contains multiple commands and/or a trailing partial command — you need the parser to work off an explicit (pointer, length) pair and return "bytes consumed" (or "incomplete, need N more") rather than relying on string scanning. Worth doing that refactor alongside this rather than layering it on top of the strlen-based approach.

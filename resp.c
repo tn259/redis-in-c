@@ -14,7 +14,7 @@
 #define NULL_REPLY "_\r\n"
 
 
-static int len_to_next_crlf(const char* str) {
+int len_to_next_crlf(const char* str) {
     const size_t len = strlen(str);
     for (int i = 0; i < (int)len; ++i) {
         if (strncmp(&str[i], CRLF, 2) == 0) {
@@ -108,7 +108,7 @@ static int deserialize_bs(const char* resp_str, BulkString_t* bs) {
     int consumed = next_crlf_len+2 + remainder_len+2;
     return consumed;
 }
-static bool element_count_is_valid(const char* resp_str, char* count_end) {
+bool element_count_is_valid(const char* resp_str, char* count_end) {
     int idx_end = (int)(count_end-resp_str);
     int i = 0;
     if (resp_str[0] == '-') {

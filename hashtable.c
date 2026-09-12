@@ -143,7 +143,6 @@ static HTNode_t* new_node(char* key, BulkString_t* in_value) {
 bool ht_set(char* key, BulkString_t* in_value) {
     uint64_t idx = key_index(key, current_size);
     NodeResult_t result = find_node_with_idx(key, idx);
-    // TODO resize
     HTNode_t* prev = result.prev;
     HTNode_t* node = result.node;
     bool found = node != NULL;
