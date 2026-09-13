@@ -164,6 +164,13 @@ static void deserialize_command_array(char* resp_str, size_t resp_len, Array_t* 
     arr->element = malloc(sizeof(RespType_t) * (size_t)arr->element_count);
     int e = 0;
     for (; e < arr->element_count; ++e) {
+        if (result->consumed >= resp_len) {
+            // more array elements than there were to be processed
+            result->completion_state = COMMAND_INCOMPLETE;
+            result->error_state.type = COMMAND_OK;
+            element_parse_fail = true;
+            goto dca_end;
+        }
         if (resp_str[result->consumed] != '$') {
             // element is not a BS
             result->consumed += 1;

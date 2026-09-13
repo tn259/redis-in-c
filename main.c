@@ -57,6 +57,12 @@ static void invalid_command_test(char* in) {
     printf("%s\n", responsebuf);
     assert(responsebuf[0] == '-');
 }
+static void incomplete_command_test(char* in) {
+    char responsebuf[BUF_SIZE];
+    CommandRequestParseResult_t res = handle_command(in, strlen(in), responsebuf);
+    assert(res.completion_state == COMMAND_INCOMPLETE);
+    assert(res.error_state.type == COMMAND_OK);
+}
 static void ping_test(void) {
     command_test((char*)"*1\r\n$4\r\nPING\r\n", (char*)"$4\r\nPONG\r\n");
     command_test((char*)"*2\r\n$4\r\nPING\r\n$5\r\nHola!\r\n", (char*)"$5\r\nHola!\r\n");
@@ -139,6 +145,18 @@ static void set_get_test(void) {
     invalid_command_test((char*)"*2\r\n$3\r\nSET\r\n$4\r\npoiu\r\n");
     ht_free();
 }
+static void commands_incomplete_test(void) {
+    // partial crlf after array len
+    incomplete_command_test((char*)"*1\r");
+    // partial crlf after bs array len
+    incomplete_command_test((char*)"*1\r\n$1\r");
+    // partial bs 
+    incomplete_command_test((char*)"*1\r\n$4\r\nPI");
+    // 2nd partial bs
+    incomplete_command_test((char*)"*2\r\n$4\r\nPING\r\n$2\r\nh");
+    // not enough array elements
+    incomplete_command_test((char*)"*2\r\n$4\r\nPING\r\n");
+}
 
 #ifdef UNIT_TEST
 static void crosspacket_command_test(void) {
@@ -202,6 +220,8 @@ static void runtests(void) {
     ht_test();
 
     set_get_test();
+
+    commands_incomplete_test();
 
 #ifdef UNIT_TEST
     crosspacket_command_test();
