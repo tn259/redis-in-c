@@ -26,10 +26,12 @@ build: $(MAIN_SRC) $(SRCFILES)
 	$(CC) $(CFLAGS) $(DEBUG_FLAGS) $^ $(DEPFLAGS) -o $(MAIN_EXE)
 	chmod a+x $(MAIN_EXE)
 
-test: build
-	ASAN_OPTIONS=detect_leaks=1 ./$(MAIN_EXE) --test
+build_test: $(MAIN_SRC) $(SRCFILES)
+	$(CC) $(CFLAGS) $(DEBUG_FLAGS) $^ $(DEPFLAGS) -DUNIT_TEST -o $(MAIN_EXE)
+	chmod a+x $(MAIN_EXE)
 
-all: build test
+test: build_test
+	ASAN_OPTIONS=detect_leaks=1 ./$(MAIN_EXE) --test
 
 clean:
 	rm -rf $(OBJFILES) $(MAIN_EXE)

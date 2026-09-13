@@ -16,6 +16,7 @@
 #include "server.h"
 #include "command.h"
 #include "utils.h"
+#include "net.h"
 
 #define PORT "6379"
 #define MAX_EVENTS 100000
@@ -46,11 +47,11 @@ static void *get_in_addr(struct sockaddr *sa)
 }
 
 // client handler with connection fd
-static void handle_client_once(int fd) {
+void handle_client_once(int fd) {
     ConnectionState_t conn_state = connection_states[fd];
     int flags = 0;
     while (true) {
-        ssize_t read = recv(fd, conn_state.request_buffer + conn_state.received, sizeof conn_state.request_buffer - conn_state.received, flags);
+        ssize_t read = net_recv(fd, conn_state.request_buffer + conn_state.received, sizeof conn_state.request_buffer - conn_state.received, flags);
         if (read < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 printf("EAGAIN\n");
@@ -65,7 +66,7 @@ static void handle_client_once(int fd) {
             printf("REQUEST fd %d: %s\n", fd, conn_state.request_buffer);
             CommandRequestParseResult_t state = handle_command(conn_state.request_buffer, buflen, conn_state.response_buffer);
             if (state.completion_state == COMMAND_COMPLETE) {
-                ssize_t sent = send(fd, conn_state.response_buffer, strlen(conn_state.response_buffer), flags);
+                ssize_t sent = net_send(fd, conn_state.response_buffer, strlen(conn_state.response_buffer), flags);
                 printf("RESPONSE fd %d: %s\n", fd, conn_state.response_buffer);
                 if (sent == -1) {
                     perror("server: send\n");

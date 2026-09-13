@@ -140,6 +140,12 @@ static void set_get_test(void) {
     ht_free();
 }
 
+#ifdef UNIT_TEST
+static void crosspacket_command_test(void) {
+
+}
+#endif
+
 static void runtests(void) {
     // Simple strings
     resp_test_ok((char*)"+OK\r\n");
@@ -196,6 +202,10 @@ static void runtests(void) {
     ht_test();
 
     set_get_test();
+
+#ifdef UNIT_TEST
+    crosspacket_command_test();
+#endif
 }
 
 
