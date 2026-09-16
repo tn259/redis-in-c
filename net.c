@@ -36,9 +36,8 @@ void assert_expected_sent(char* expected) {
     assert(strncasecmp(expected, (char*)mock_send_buffer, mock_send_len) == 0);
 }
 
-void feed_recv_data(char* data) {
-    size_t len = strlen(data);
-    memcpy(mock_recv_buffer, data, len);
+void feed_recv_data(char* data, size_t start_idx, size_t len) {
+    memcpy(mock_recv_buffer, data+start_idx, len);
     mock_recv_len = len; 
 }
 
@@ -60,7 +59,9 @@ ssize_t net_recv(int fd, void* data, size_t len, int flags) {
     memcpy(data, mock_recv_buffer, mock_recv_len);
     char* d = (char*)data;
     d[mock_recv_len] = '\0';
-    return (ssize_t)mock_recv_len;
+    size_t prev_mock_recv_len = mock_recv_len;
+    mock_recv_len = 0;
+    return (ssize_t)prev_mock_recv_len;
 }
 
 #endif

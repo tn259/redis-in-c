@@ -3,6 +3,7 @@
 #include "utils.h"
 #include "command.h"
 #include "hashtable.h"
+#include "net.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -160,7 +161,21 @@ static void commands_incomplete_test(void) {
 
 #ifdef UNIT_TEST
 static void crosspacket_command_test(void) {
-
+    init_connection_states();
+    char* command = (char*)"*2\r\n$4\r\nPING\r\n$5\r\nhello\r\n";
+    char* response = (char*)"$5\r\nhello\r\n";
+    size_t len = strlen(command);
+    int fd = 10;
+    reset_mocks();
+    for (size_t idx = 0; idx < len; ++idx) {
+        feed_recv_data(command, idx, 1);
+        handle_client_once(fd);
+        if (idx < len-1) {
+            assert_expected_sent((char*)"");
+            reset_mocks();
+        }
+    }
+    assert_expected_sent(response);
 }
 #endif
 

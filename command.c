@@ -139,7 +139,7 @@ static void deserialize_command_array(char* resp_str, size_t resp_len, Array_t* 
     if (next_crlf_len < 0 || (size_t)next_crlf_len+2 > resp_len) {
         result->completion_state = COMMAND_INCOMPLETE;
         result->error_state.type = COMMAND_OK;
-        result->consumed += strlen(resp_str);
+        result->consumed += strlen(resp_str+result->consumed);
         return; 
     }
 

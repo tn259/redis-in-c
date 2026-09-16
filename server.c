@@ -32,7 +32,11 @@ typedef struct ConnectionState {
     size_t sent;
 } ConnectionState_t;
 
-static ConnectionState_t connection_states[MAX_CONNECTIONS] = { 0 };
+ConnectionState_t connection_states[MAX_CONNECTIONS];
+
+void init_connection_states(void) {
+    memset(connection_states, 0, sizeof(ConnectionState_t) * MAX_CONNECTIONS);
+}
 
 // get sockaddr, IPv4 or IPv6:
 static void *get_in_addr(struct sockaddr *sa)
@@ -48,10 +52,11 @@ static void *get_in_addr(struct sockaddr *sa)
 
 // client handler with connection fd
 void handle_client_once(int fd) {
-    ConnectionState_t conn_state = connection_states[fd];
+    ConnectionState_t* conn_state = &connection_states[fd];
+    printf("fd %d, conn_state recvd %zu\n", fd, conn_state->received);
     int flags = 0;
     while (true) {
-        ssize_t read = net_recv(fd, conn_state.request_buffer + conn_state.received, sizeof conn_state.request_buffer - conn_state.received, flags);
+        ssize_t read = net_recv(fd, conn_state->request_buffer + conn_state->received, sizeof conn_state->request_buffer - conn_state->received, flags);
         if (read < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 printf("EAGAIN\n");
@@ -61,24 +66,24 @@ void handle_client_once(int fd) {
             close(fd); // automatically removes from kqueue
             break;
         } else if (read > 0) {
-            size_t buflen = conn_state.received+(size_t)read;
-            conn_state.request_buffer[buflen] = '\0';
-            printf("REQUEST fd %d: %s\n", fd, conn_state.request_buffer);
-            CommandRequestParseResult_t state = handle_command(conn_state.request_buffer, buflen, conn_state.response_buffer);
+            size_t buflen = conn_state->received+(size_t)read;
+            conn_state->request_buffer[buflen] = '\0';
+            printf("REQUEST fd %d: %s\n", fd, conn_state->request_buffer);
+            CommandRequestParseResult_t state = handle_command(conn_state->request_buffer, buflen, conn_state->response_buffer);
             if (state.completion_state == COMMAND_COMPLETE) {
-                ssize_t sent = net_send(fd, conn_state.response_buffer, strlen(conn_state.response_buffer), flags);
-                printf("RESPONSE fd %d: %s\n", fd, conn_state.response_buffer);
+                ssize_t sent = net_send(fd, conn_state->response_buffer, strlen(conn_state->response_buffer), flags);
+                printf("RESPONSE fd %d: %s\n", fd, conn_state->response_buffer);
                 if (sent == -1) {
                     perror("server: send\n");
                 }
                 // reset state and continue
-                memset(&conn_state, 0, sizeof(conn_state));
+                memset(conn_state, 0, sizeof(ConnectionState_t));
             } else {
-                conn_state.received += (size_t)read;
+                conn_state->received += (size_t)read;
                 if (state.error_state.type != COMMAND_OK) {
                     // It's incomplete and already errorneous - bail with error message
-                    ssize_t sent = send(fd, conn_state.response_buffer, strlen(conn_state.response_buffer), flags);
-                    printf("RESPONSE fd %d: %s\n", fd, conn_state.response_buffer);
+                    ssize_t sent = send(fd, conn_state->response_buffer, strlen(conn_state->response_buffer), flags);
+                    printf("RESPONSE fd %d: %s\n", fd, conn_state->response_buffer);
                     if (sent == -1) {
                         perror("server: send\n");
                     }
@@ -110,6 +115,8 @@ void serve(void) {
     // accept -> newfd then send and recv in child process
     // later move onto libevent or libuv
     //}
+    init_connection_states();
+
     struct addrinfo hints, *servinfo;
 
     memset(&hints, 0, sizeof hints);
